@@ -19,6 +19,9 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	routingTable := concurrent.NewRoutingTable()
 	view := concurrent.NewView()
 	rumorsStore := concurrent.NewRumorsStore()
+	summaryStore := concurrent.NewSummaryStore()
+	voteStore := concurrent.NewVoteStore()
+	commentStore := concurrent.NewCommentStore()
 	ackChannels := concurrent.NewAckChannels()
 
 	// the peer's routing table should contain one element, the peer’s address and relay to itself
@@ -35,6 +38,9 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		view:                  view,
 		ackChannels:           ackChannels,
 		rumorsStore:           rumorsStore,
+		summaryStore:          summaryStore,
+		commentStore:          commentStore,
+		voteStore:             voteStore,
 		catalog:               catalog,
 	}
 
@@ -56,6 +62,9 @@ type node struct {
 	view                  concurrent.View
 	ackChannels           concurrent.AckChannels
 	rumorsStore           concurrent.RumorsStore
+	summaryStore          concurrent.SummaryStore
+	voteStore             concurrent.VoteStore
+	commentStore          concurrent.CommentStore
 	catalog               peer.Catalog
 	requestManager        request.Manager
 }
@@ -502,4 +511,44 @@ func (n *node) ExecSearchReplyMessage(msg types.Message, pkt transport.Packet) e
 	}
 
 	return n.requestManager.ReceiveSearchReply(searchReplyMessage)
+}
+
+func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet) error {
+	articleSummaryMessage, ok := msg.(*types.ArticleSummaryMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] article summary message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	n.summaryStore.Set(articleSummaryMessage.ArticleID, *articleSummaryMessage)
+
+	return nil
+}
+
+func (n *node) ExecCommentMessage(msg types.Message, pkt transport.Packet) error {
+	commentMessage, ok := msg.(*types.CommentMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] comment message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	n.commentStore.Add(commentMessage.ArticleID, *commentMessage)
+	return nil
+}
+
+func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
+	voteMessage, ok := msg.(*types.VoteMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	n.voteStore.Add(voteMessage.ArticleID, *voteMessage)
+	return nil
 }
