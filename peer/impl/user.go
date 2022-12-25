@@ -2,18 +2,19 @@ package impl
 
 import (
 	"github.com/rs/xid"
-	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/types"
+	"golang.org/x/xerrors"
 	"io"
 	"regexp"
 	"strings"
+	"time"
 )
 
-func (n *node) PublishArticle(title string, content io.Reader) error {
+func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 	metaHash, err := n.Upload(content)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	blobStore := n.conf.Storage.GetDataBlobStore()
@@ -36,63 +37,31 @@ func (n *node) PublishArticle(title string, content io.Reader) error {
 
 	articleSummaryTransportMessage, err := types.ToTransport(articleSummaryMessage)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_ = n.Tag(title, metaHash)
 
-	return n.Broadcast(articleSummaryTransportMessage)
+	err = n.Broadcast(articleSummaryTransportMessage)
+	return articleID, err
 }
 
-func (n *node) DownloadArticle(title string, conf peer.ExpandingRing) ([]byte, error) {
+func (n *node) DownloadArticle(title, metahash string) ([]byte, error) {
 	// check if article exists locally
+	if n.hasAllChunks(metahash) {
+		return n.Download(metahash) //local download
+	}
+
 	reg := *regexp.MustCompile(title)
-	matches := n.searchFilesLocally(reg.String())
-
-	if len(matches) > 1 {
-		z.Logger.Warn().Msgf("multiples local results for %s, should only be one result", title)
+	responses, err := n.SearchAll(reg, 15, time.Millisecond*100) //update catalog
+	if err != nil {
+		return nil, err
+	}
+	if len(responses) == 0 {
+		return nil, xerrors.Errorf("Article Not found")
 	}
 
-	for _, metaHash := range matches {
-		if n.hasAllChunks(metaHash) {
-			return n.Download(metaHash) //local download
-		}
-	}
-
-	// expanding ring search to find the first peer with all chunks for that article
-	// Other option: Call SearchAll(*) periodically (to update catalog) and simply call Download()
-	blobStore := n.conf.Storage.GetDataBlobStore()
-
-	neighbors := n.GetNeighbors("")
-	if len(neighbors) == 0 {
-		return nil, nil
-	}
-
-	budget := conf.Initial
-	for i := 0; i < int(conf.Retry); i++ {
-		budgets := DivideBudget(budget, neighbors)
-		responses := n.requestManager.SendSearchRequest(n.GetAddress(), reg.String(), neighbors, budgets, conf.Timeout)
-		for j := 0; j < len(responses); j++ {
-			isFullFile := true
-			for _, chunk := range responses[j].Chunks {
-				if len(chunk) == 0 {
-					isFullFile = false
-					break
-				}
-			}
-			if isFullFile {
-				for _, chunk := range responses[j].Chunks {
-					chunkHash := sha256Encode(chunk)
-					blobStore.Set(chunkHash, chunk)
-				}
-				return n.Download(responses[j].Metahash) //local download
-			}
-		}
-
-		budget *= conf.Factor
-	}
-
-	return nil, nil
+	return n.Download(metahash)
 }
 
 func (n *node) Comment(comment, articleID string) error {
@@ -122,4 +91,8 @@ func (n *node) Vote(articleID string) error {
 	}
 
 	return n.Broadcast(voteTransportMessage)
+}
+
+func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
+	return n.summaryStore.Get(articleID)
 }

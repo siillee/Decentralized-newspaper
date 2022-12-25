@@ -80,7 +80,7 @@ func (n *node) Download(metahash string) ([]byte, error) {
 	if len(metafile) == 0 {
 		dest, err := n.catalog.GetRandomPeer(metahash)
 		if err != nil {
-			return nil, xerrors.Errorf("[%s] unable to get the metafile", n.GetAddress())
+			return nil, xerrors.Errorf("[%s] unable to get the metafile, %v", n.GetAddress(), err)
 		}
 
 		metafile, err = n.requestManager.SendDataRequest(dest, metahash)

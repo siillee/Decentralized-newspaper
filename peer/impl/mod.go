@@ -524,6 +524,8 @@ func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet
 
 	n.summaryStore.Set(articleSummaryMessage.ArticleID, *articleSummaryMessage)
 
+	// TODO: download this file with probability p
+
 	return nil
 }
 
