@@ -2,17 +2,21 @@ package unit
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
+	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/transport/channel"
+	"go.dedis.ch/cs438/types"
 	"testing"
 	"time"
 )
 
-func Test_Authenticity_Integrity_Summary(t *testing.T) {
+func Test_Authenticity_Integrity_Summary_Valid(t *testing.T) {
 	transp := channel.NewTransport()
 
 	EC := elliptic.P256()
@@ -61,4 +65,72 @@ func Test_Authenticity_Integrity_Summary(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	require.NotEmpty(t, node2.GetSummary(articleID))
+}
+
+// A malicious node tries to send a summary supposedly coming from node 2
+func Test_Authenticity_Integrity_Summary_Invalid(t *testing.T) {
+	transp := channel.NewTransport()
+
+	EC := elliptic.P256()
+
+	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
+	defer node1.Stop()
+
+	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2))
+	defer node2.Stop()
+
+	node1.AddPublicKey(keys2.PublicKey, node2.GetAddr())
+	node2.AddPublicKey(keys1.PublicKey, node1.GetAddr())
+
+	keys3, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	sock, err := transp.CreateSocket("127.0.0.1:0")
+	require.NoError(t, err)
+	defer sock.Close()
+
+	node1.AddPublicKey(keys3.PublicKey, sock.GetAddress())
+	node2.AddPublicKey(keys3.PublicKey, sock.GetAddress())
+
+	time.Sleep(2 * time.Second)
+
+	title := "No one should trust this article"
+	articleID := xid.New().String()
+	h := crypto.SHA256.New()
+	h.Write([]byte("don't trust me"))
+	metahash := h.Sum(nil)
+
+	articleSummaryMessage := types.ArticleSummaryMessage{
+		ArticleID: articleID,
+		Title:     title,
+		//ShortDescription: shortDescription,
+		Metahash: string(metahash),
+		UserID:   node2.GetAddr(),
+	}
+	articleSummaryTransportMessage, err := types.ToTransport(articleSummaryMessage)
+	require.NoError(t, err)
+
+	header := transport.NewHeader(
+		node2.GetAddr(), // source
+		node2.GetAddr(), // relay
+		node1.GetAddr(), // destination
+		0,               // TTL
+	)
+	pkt := transport.Packet{
+		Header: &header,
+		Msg:    &articleSummaryTransportMessage,
+	}
+
+	err = sock.Send(node1.GetAddr(), pkt, 0)
+	require.NoError(t, err)
+
+	time.Sleep(50 * time.Millisecond)
+
+	require.Empty(t, node1.GetSummary(articleID))
 }
