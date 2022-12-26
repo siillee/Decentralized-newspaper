@@ -538,7 +538,7 @@ func (n *node) ExecCommentMessage(msg types.Message, pkt transport.Packet) error
 
 	z.Logger.Info().Msgf("[%s] comment message received from %s", n.GetAddress(), pkt.Header.Source)
 
-	n.commentStore.Add(commentMessage.ArticleID, *commentMessage)
+	n.commentStore.Add(*commentMessage)
 	return nil
 }
 
@@ -551,6 +551,6 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 
 	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
 
-	n.voteStore.Add(voteMessage.ArticleID, *voteMessage)
+	n.voteStore.Add(*voteMessage)
 	return nil
 }
