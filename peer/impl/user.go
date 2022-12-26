@@ -1,13 +1,12 @@
 package impl
 
 import (
+	"crypto/ecdsa"
 	"github.com/rs/xid"
-	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
 	"io"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -17,22 +16,29 @@ func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 		return "", err
 	}
 
-	blobStore := n.conf.Storage.GetDataBlobStore()
-
-	metafile := blobStore.Get(metaHash)
-	chunkHexKeys := strings.Split(string(metafile), peer.MetafileSep)
-
-	firstChunkData := blobStore.Get(chunkHexKeys[0])
-	shortDescription := string(firstChunkData[:150])
+	//blobStore := n.conf.Storage.GetDataBlobStore()
+	//metafile := blobStore.Get(metaHash)
+	//chunkHexKeys := strings.Split(string(metafile), peer.MetafileSep)
+	//firstChunkData := blobStore.Get(chunkHexKeys[0])
+	//shortDescription := string(firstChunkData[:150])
 
 	articleID := xid.New().String()
 
 	articleSummaryMessage := types.ArticleSummaryMessage{
-		ArticleID:        articleID,
-		UserID:           n.GetAddress(),
-		Title:            title,
-		ShortDescription: shortDescription,
-		Metahash:         metaHash,
+		ArticleID: articleID,
+		Title:     title,
+		//ShortDescription: shortDescription,
+		Metahash: metaHash,
+	}
+
+	isUsingTor := false //add signature only if not anonymous and if it has a privateKey
+	if !isUsingTor && n.conf.PrivateKey != nil {
+		articleSummaryMessage.UserID = n.GetAddress()
+		signature, err := articleSummaryMessage.Sign(n.conf.PrivateKey)
+		if err != nil {
+			return "", err
+		}
+		articleSummaryMessage.Signature = signature
 	}
 
 	articleSummaryTransportMessage, err := types.ToTransport(articleSummaryMessage)
@@ -95,4 +101,8 @@ func (n *node) Vote(articleID string) error {
 
 func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 	return n.summaryStore.Get(articleID)
+}
+
+func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {
+	n.pkMap[userID] = pk
 }

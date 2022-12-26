@@ -1,6 +1,9 @@
 package types
 
 import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"fmt"
 	"strings"
 )
@@ -23,7 +26,8 @@ func (a ArticleSummaryMessage) String() string {
 	out := new(strings.Builder)
 
 	fmt.Fprintf(out, "Title: \t %s \n", a.Title)
-	fmt.Fprintf(out, "Description: \t %s \n", a.ShortDescription)
+	fmt.Fprintf(out, "UserID: \t %s \n", a.UserID)
+	fmt.Fprintf(out, "Signature: %x \n", a.Signature)
 
 	return out.String()
 }
@@ -31,6 +35,24 @@ func (a ArticleSummaryMessage) String() string {
 // HTML implements types.Message.
 func (a ArticleSummaryMessage) HTML() string {
 	return a.String()
+}
+
+func (a ArticleSummaryMessage) Hash() []byte {
+	h := crypto.SHA256.New()
+	h.Write([]byte(a.ArticleID))
+	h.Write([]byte(a.UserID))
+	h.Write([]byte(a.Title))
+	//h.Write([]byte(a.ShortDescription))
+	h.Write([]byte(a.Metahash))
+	return h.Sum(nil)
+}
+
+func (a ArticleSummaryMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	return ecdsa.SignASN1(rand.Reader, privateKey, a.Hash())
+}
+
+func (a ArticleSummaryMessage) Verify(publicKey ecdsa.PublicKey) bool {
+	return ecdsa.VerifyASN1(&publicKey, a.Hash(), a.Signature)
 }
 
 // -----------------------------------------------------------------------------
@@ -60,6 +82,22 @@ func (c CommentMessage) HTML() string {
 	return c.String()
 }
 
+func (c CommentMessage) Hash() []byte {
+	h := crypto.SHA256.New()
+	h.Write([]byte(c.ArticleID))
+	h.Write([]byte(c.UserID))
+	h.Write([]byte(c.Content))
+	return h.Sum(nil)
+}
+
+func (c CommentMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	return ecdsa.SignASN1(rand.Reader, privateKey, c.Hash())
+}
+
+func (c CommentMessage) Verify(publicKey ecdsa.PublicKey) bool {
+	return ecdsa.VerifyASN1(&publicKey, c.Hash(), c.Signature)
+}
+
 // -----------------------------------------------------------------------------
 // VoteMessage
 
@@ -85,4 +123,19 @@ func (v VoteMessage) String() string {
 // HTML implements types.Message.
 func (v VoteMessage) HTML() string {
 	return v.String()
+}
+
+func (v VoteMessage) Hash() []byte {
+	h := crypto.SHA256.New()
+	h.Write([]byte(v.ArticleID))
+	h.Write([]byte(v.UserID))
+	return h.Sum(nil)
+}
+
+func (v VoteMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	return ecdsa.SignASN1(rand.Reader, privateKey, v.Hash())
+}
+
+func (v VoteMessage) Verify(publicKey ecdsa.PublicKey) bool {
+	return ecdsa.VerifyASN1(&publicKey, v.Hash(), v.Signature)
 }

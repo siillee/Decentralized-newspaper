@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 
@@ -139,6 +140,8 @@ type configTemplate struct {
 	storage storage.Storage
 
 	dataRequestBackoff peer.Backoff
+
+	privateKey *ecdsa.PrivateKey
 }
 
 func newConfigTemplate() configTemplate {
@@ -247,6 +250,13 @@ func WithStorage(storage storage.Storage) Option {
 	}
 }
 
+// WithPrivateKey sets a key pair (private key, public key)
+func WithPrivateKey(key *ecdsa.PrivateKey) Option {
+	return func(ct *configTemplate) {
+		ct.privateKey = key
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -270,6 +280,7 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.Storage = template.storage
 	config.ChunkSize = template.chunkSize
 	config.BackoffDataRequest = template.dataRequestBackoff
+	config.PrivateKey = template.privateKey
 
 	node := f(config)
 

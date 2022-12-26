@@ -1,6 +1,7 @@
 package impl
 
 import (
+	"crypto/ecdsa"
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
@@ -28,6 +29,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	peerAddress := conf.Socket.GetAddress()
 	routingTable.AddEntry(peerAddress, peerAddress)
 
+	// mapping between peer address (or userID) and their public key
+	pkMap := make(map[string]ecdsa.PublicKey)
+	pkMap[peerAddress] = conf.PrivateKey.PublicKey
+
 	catalog := make(peer.Catalog)
 
 	n := &node{
@@ -42,6 +47,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		commentStore:          commentStore,
 		voteStore:             voteStore,
 		catalog:               catalog,
+		pkMap:                 pkMap,
 	}
 
 	n.requestManager = request.NewRequestManager(n, n.conf.BackoffDataRequest)
@@ -67,6 +73,7 @@ type node struct {
 	commentStore          concurrent.CommentStore
 	catalog               peer.Catalog
 	requestManager        request.Manager
+	pkMap                 map[string]ecdsa.PublicKey
 }
 
 func (n *node) GetNeighbors(excluded string) []string {
@@ -522,6 +529,10 @@ func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet
 
 	z.Logger.Info().Msgf("[%s] article summary message received from %s", n.GetAddress(), pkt.Header.Source)
 
+	if articleSummaryMessage.UserID != "" && !articleSummaryMessage.Verify(n.pkMap[articleSummaryMessage.UserID]) {
+		return nil
+	}
+
 	n.summaryStore.Set(articleSummaryMessage.ArticleID, *articleSummaryMessage)
 
 	// TODO: download this file with probability p
@@ -551,6 +562,9 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 
 	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
 
-	n.voteStore.Add(*voteMessage)
+	if pkt.Header.Source == voteMessage.UserID {
+		n.voteStore.Add(*voteMessage)
+	}
+
 	return nil
 }
