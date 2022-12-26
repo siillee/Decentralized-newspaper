@@ -18,10 +18,10 @@ type SafeCommentStore struct {
 	comments map[string][]types.CommentMessage
 }
 
-func (sf *SafeCommentStore) add(key string, rumor types.CommentMessage) {
+func (sf *SafeCommentStore) add(comment types.CommentMessage) {
 	sf.Lock()
 	defer sf.Unlock()
-	sf.comments[key] = append(sf.comments[key], rumor)
+	sf.comments[comment.ArticleID] = append(sf.comments[comment.ArticleID], comment)
 }
 
 func (sf *SafeCommentStore) get(key string) []types.CommentMessage {
@@ -34,8 +34,8 @@ type CommentStore struct {
 	store *SafeCommentStore
 }
 
-func (cs *CommentStore) Add(articleID string, comment types.CommentMessage) {
-	cs.store.add(articleID, comment)
+func (cs *CommentStore) Add(comment types.CommentMessage) {
+	cs.store.add(comment)
 }
 
 func (cs *CommentStore) Get(articleID string) []types.CommentMessage {
