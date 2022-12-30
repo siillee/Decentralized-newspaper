@@ -31,7 +31,9 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 
 	// mapping between peer address (or userID) and their public key
 	pkMap := make(map[string]ecdsa.PublicKey)
-	pkMap[peerAddress] = conf.PrivateKey.PublicKey
+	if conf.PrivateKey != nil {
+		pkMap[peerAddress] = conf.PrivateKey.PublicKey
+	}
 
 	catalog := make(peer.Catalog)
 

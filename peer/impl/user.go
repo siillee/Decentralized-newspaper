@@ -6,6 +6,7 @@ import (
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
 	"io"
+	"math"
 	"regexp"
 	"time"
 )
@@ -67,7 +68,21 @@ func (n *node) DownloadArticle(title, metahash string) ([]byte, error) {
 		return nil, xerrors.Errorf("Article Not found")
 	}
 
-	return n.Download(metahash)
+	content, err := n.Download(metahash)
+	if err != nil {
+		return nil, err
+	}
+
+	// check metahash
+	nChunks := int(math.Ceil(float64(len(content)) / float64(n.conf.ChunkSize)))
+	_, chunks := n.DivideIntoChunks(content, nChunks)
+	metahashOutput := n.ComputeMetaHash(chunks, nChunks)
+
+	if metahashOutput == metahash {
+		return content, nil
+	} else {
+		return nil, xerrors.Errorf("Content has been modified !")
+	}
 }
 
 func (n *node) Comment(comment, articleID string) error {
