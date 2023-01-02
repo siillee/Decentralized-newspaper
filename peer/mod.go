@@ -5,6 +5,7 @@ import (
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
+	"math/big"
 	"time"
 )
 
@@ -65,6 +66,8 @@ type Configuration struct {
 
 	// Contains public and private key
 	PrivateKey *ecdsa.PrivateKey
+
+	DH DHParameters
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must
@@ -78,4 +81,10 @@ type Backoff struct {
 	Initial time.Duration
 	Factor  uint
 	Retry   uint
+}
+
+type DHParameters struct {
+	P *big.Int
+	Q *big.Int
+	G *big.Int
 }

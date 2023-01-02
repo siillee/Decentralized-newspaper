@@ -2,11 +2,13 @@ package impl
 
 import (
 	"crypto/ecdsa"
+	rd "crypto/rand"
 	"github.com/rs/xid"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
 	"io"
 	"math"
+	"math/big"
 	"regexp"
 	"time"
 )
@@ -120,4 +122,52 @@ func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 
 func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {
 	n.pkMap[userID] = pk
+}
+
+func (n *node) EstablishKeyExchange(userID string) (big.Int, error) {
+	dhKeys, ok := n.dhKeyStore.Get(userID)
+	if ok {
+		return dhKeys.SharedSecret, nil
+	}
+
+	privateKey := new(big.Int).SetInt64(0)
+	myPublicKey := new(big.Int).SetInt64(0)
+
+	privateKey, _ = rd.Int(rd.Reader, n.conf.DH.Q)
+	n.dhKeyStore.SetPrivate(userID, *privateKey)
+
+	notifyChannel := make(chan bool)
+	n.dhKeyStore.SetChannel(userID, notifyChannel)
+
+	myPublicKey.Exp(n.conf.DH.G, privateKey, n.conf.DH.P)
+	reply := types.DHPublicKeyMessage{
+		UserID:    n.GetAddress(),
+		PublicKey: myPublicKey,
+	}
+
+	replyTransportMessage, err := types.ToTransport(reply)
+	if err != nil {
+		return *new(big.Int).SetInt64(0), xerrors.Errorf("failed to build reply DHPublicKey transport message")
+	}
+
+	err = n.Unicast(userID, replyTransportMessage)
+	if err != nil {
+		return *new(big.Int).SetInt64(0), err
+	}
+
+	select {
+	case _ = <-notifyChannel:
+		entry, _ := n.dhKeyStore.Get(userID)
+		return entry.SharedSecret, nil
+	case <-time.After(5 * time.Second):
+		return *new(big.Int).SetInt64(0), xerrors.Errorf("failed to exchange keys with %s (timeout)", userID)
+	}
+}
+
+func (n *node) GetSharedSecret(userID string) big.Int {
+	entry, ok := n.dhKeyStore.Get(userID)
+	if !ok {
+		return *new(big.Int).SetInt64(0)
+	}
+	return entry.SharedSecret
 }

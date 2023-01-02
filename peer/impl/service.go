@@ -51,6 +51,7 @@ func (n *node) RegisterHandlers() {
 		types.ArticleSummaryMessage{},
 		types.CommentMessage{},
 		types.VoteMessage{},
+		types.DHPublicKeyMessage{},
 	}
 	handlers := []registry.Exec{
 		n.ExecChatMessage,
@@ -66,6 +67,7 @@ func (n *node) RegisterHandlers() {
 		n.ExecArticleSummaryMessage,
 		n.ExecCommentMessage,
 		n.ExecVoteMessage,
+		n.ExecDHPublicKeyMessage,
 	}
 	for i, msgType := range handledTypes {
 		n.conf.MessageRegistry.RegisterMessageCallback(msgType, handlers[i])

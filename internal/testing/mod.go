@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"math/big"
 
 	"math/rand"
 
@@ -142,6 +143,7 @@ type configTemplate struct {
 	dataRequestBackoff peer.Backoff
 
 	privateKey *ecdsa.PrivateKey
+	dhParams   peer.DHParameters
 }
 
 func newConfigTemplate() configTemplate {
@@ -257,6 +259,17 @@ func WithPrivateKey(key *ecdsa.PrivateKey) Option {
 	}
 }
 
+// WithDHParams sets DH parameters
+func WithDHParams(p, q, g *big.Int) Option {
+	return func(ct *configTemplate) {
+		ct.dhParams = peer.DHParameters{
+			P: p,
+			Q: q,
+			G: g,
+		}
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -281,6 +294,7 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.ChunkSize = template.chunkSize
 	config.BackoffDataRequest = template.dataRequestBackoff
 	config.PrivateKey = template.privateKey
+	config.DH = template.dhParams
 
 	node := f(config)
 

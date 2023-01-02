@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"go.dedis.ch/cs438/types"
 	"io"
+	"math/big"
 )
 
 type User interface {
@@ -18,4 +19,8 @@ type User interface {
 	GetSummary(articleID string) types.ArticleSummaryMessage
 
 	AddPublicKey(pk ecdsa.PublicKey, userID string)
+
+	EstablishKeyExchange(userID string) (big.Int, error)
+
+	GetSharedSecret(userID string) big.Int // for testing purpose
 }
