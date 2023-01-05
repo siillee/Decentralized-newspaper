@@ -1,14 +1,15 @@
 package impl
 
 import (
-	"github.com/rs/xid"
-	"go.dedis.ch/cs438/peer"
-	"go.dedis.ch/cs438/types"
-	"golang.org/x/xerrors"
 	"io"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/rs/xid"
+	"go.dedis.ch/cs438/peer"
+	"go.dedis.ch/cs438/types"
+	"golang.org/x/xerrors"
 )
 
 func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
@@ -33,6 +34,7 @@ func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 		Title:            title,
 		ShortDescription: shortDescription,
 		Metahash:         metaHash,
+		Timestamp:        time.Now(),
 	}
 
 	articleSummaryTransportMessage, err := types.ToTransport(articleSummaryMessage)
@@ -69,6 +71,7 @@ func (n *node) Comment(comment, articleID string) error {
 		ArticleID: articleID,
 		UserID:    n.GetAddress(),
 		Content:   comment,
+		Timestamp: time.Now(),
 	}
 
 	commentTransportMessage, err := types.ToTransport(commentMessage)
@@ -80,9 +83,10 @@ func (n *node) Comment(comment, articleID string) error {
 }
 
 func (n *node) Vote(articleID string) error {
-	voteMessage := types.CommentMessage{
+	voteMessage := types.VoteMessage{
 		ArticleID: articleID,
 		UserID:    n.GetAddress(),
+		Timestamp: time.Now(),
 	}
 
 	voteTransportMessage, err := types.ToTransport(voteMessage)
