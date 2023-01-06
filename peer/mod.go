@@ -2,10 +2,11 @@ package peer
 
 import (
 	"crypto/ecdsa"
+	"time"
+
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
-	"time"
 )
 
 // Peer defines the interface of a peer in the Peerster system. It embeds all
@@ -65,6 +66,27 @@ type Configuration struct {
 
 	// Contains public and private key
 	PrivateKey *ecdsa.PrivateKey
+
+	// Sybil config
+	// Number of articles in the recommendation feed.
+	// Default: 5
+	RecommendationSetSize uint
+	// Factor value for dsybil non-overwhelming good object.
+	// Default: 2.0
+	PositiveFactor float64
+	// Factor value for dsybil bad object.
+	// Default: 2.0
+	NegativeFactor float64
+	// Initial score value for dsybil assigned at first non-overwhelming
+	// good object of voter.
+	// Default: 2.0
+	InitialScore float64
+	// Threshold for when a dsybil object is considered overwhelming.
+	// Default: 10.0
+	OverwhelmingThreshold float64
+	// Duration after article creation during which votes are recorded.
+	// Default: 2 weeks
+	VoteTimeout time.Duration
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

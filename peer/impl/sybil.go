@@ -1,44 +1,62 @@
 package impl
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	crand "crypto/rand"
 	"math/rand"
+
+	"go.dedis.ch/cs438/peer"
+	"go.dedis.ch/cs438/peer/impl/concurrent"
 )
 
-func NewRecommender() Recommender {
-	recommendationSetSize := uint(10)
+func (n *node) Like(articleID string) error {
+	n.recommender.Like(articleID)
+	return n.Vote(articleID)
+}
+
+func (n *node) Dislike(articleID string) {
+	n.recommender.Dislike(articleID)
+}
+
+func (n *node) GetRecommendations() []string {
+	return n.recommender.GetRecommendations()
+}
+
+func (n *node) RefreshRecommendations() uint {
+	return n.recommender.RefreshRecommendations()
+}
+
+func NewRecommender(conf *peer.Configuration, voteStore *concurrent.VoteStore) Recommender {
+	EC := elliptic.P256()
+	key, _ := ecdsa.GenerateKey(EC, crand.Reader) // TODO: error?
+
 	return Recommender{
+		// Config args
+		conf: conf,
 		// State args
-		voteStore:  make(map[string]map[string]bool),
+		voteStore:  voteStore,
 		trustStore: make(map[string]float64),
 		consumed:   make(map[string]bool),
-		current:    make([]string, 0, recommendationSetSize),
-		// TODO: initialize from config object
-		// Config args
-		recommendationSetSize: recommendationSetSize,
-		positiveFactor:        2,
-		negativeFactor:        2,
-		initialScore:          3,
-		overwhelmingThreshold: 10,
+		current:    make([]string, 0, conf.RecommendationSetSize),
+		key:        key,
 	}
 }
 
 type Recommender struct {
+	// Config
+	conf *peer.Configuration
 	// State args
 	// Article id (hash) indexed map of user id (vote id?) indexed set of votes
-	voteStore map[string]map[string]bool
+	voteStore *concurrent.VoteStore
 	// User id (vote id?) indexed map of trust values
 	trustStore map[string]float64
 	// Article id (hash) indexed set of already consumed articles
 	consumed map[string]bool
 	// Article id array of currently recommended articles
 	current []string
-
-	// Config args
-	recommendationSetSize uint
-	positiveFactor        float64
-	negativeFactor        float64
-	initialScore          float64
-	overwhelmingThreshold float64
+	// Key?
+	key *ecdsa.PrivateKey
 }
 
 type ArticleScore struct {
@@ -65,9 +83,9 @@ func (r *Recommender) Like(articleID string) {
 	// Update trust values
 	for _, voter := range score.voters {
 		if r.trustStore[voter] == 0 {
-			r.trustStore[voter] = r.initialScore / float64(zeroCount)
+			r.trustStore[voter] = r.conf.InitialScore / float64(zeroCount)
 		} else {
-			r.trustStore[voter] *= r.positiveFactor
+			r.trustStore[voter] *= r.conf.PositiveFactor
 		}
 	}
 }
@@ -75,7 +93,7 @@ func (r *Recommender) Like(articleID string) {
 func (r *Recommender) Dislike(articleID string) {
 	score := r.calculateArticleScore(articleID)
 	for _, voter := range score.voters {
-		r.trustStore[voter] *= r.negativeFactor
+		r.trustStore[voter] *= r.conf.NegativeFactor
 	}
 }
 
@@ -90,8 +108,8 @@ const (
 )
 
 func (r *Recommender) RefreshRecommendations() uint {
-	selection := make([]string, 0, r.recommendationSetSize)
-	for i := uint(0); i < r.recommendationSetSize; i++ {
+	selection := make([]string, 0, r.conf.RecommendationSetSize)
+	for i := uint(0); i < r.conf.RecommendationSetSize; i++ {
 		recStatus, selected := r.pickArticle()
 		if recStatus == RecFailure {
 			break
@@ -104,43 +122,16 @@ func (r *Recommender) RefreshRecommendations() uint {
 	if len(r.current) == 0 {
 		return RecFailure
 	}
-	if uint(len(r.current)) < r.recommendationSetSize {
+	if uint(len(r.current)) < r.conf.RecommendationSetSize {
 		return RecPartial
 	}
 	return RecSuccess
 }
 
-func (r *Recommender) RecordVote(articleID string, voterID string) {
-	articleMap, ok := r.voteStore[articleID]
-	if !ok {
-		r.voteStore[articleID] = make(map[string]bool)
-		articleMap = r.voteStore[articleID]
-	}
-
-	_, ok = articleMap[voterID]
-	if !ok {
-		// Only record vote if it has not already been recorded
-		articleMap[voterID] = true
-	}
-}
-
 func (r *Recommender) calculateArticleScore(articleID string) ArticleScore {
-	articleMap, ok := r.voteStore[articleID]
-	if !ok {
-		return ArticleScore{
-			id:     articleID,
-			value:  0,
-			voters: nil,
-		}
-	}
-
-	voters := make([]string, len(articleMap))
-	index := 0
+	voters := r.voteStore.Get(articleID)
 	score := float64(0)
-	for voterID := range articleMap {
-		voters[index] = voterID
-		index++
-
+	for _, voterID := range voters {
 		score += r.trustStore[voterID]
 	}
 
@@ -152,14 +143,14 @@ func (r *Recommender) calculateArticleScore(articleID string) ArticleScore {
 }
 
 func (r *Recommender) isOverwhelming(score *ArticleScore) bool {
-	return score.value >= r.overwhelmingThreshold
+	return score.value >= r.conf.OverwhelmingThreshold
 }
 
 func (r *Recommender) pickArticle() (uint, string) {
 	overwhelmingArticles := make([]string, 0)
 	nonOverwhelmingArticles := make([]string, 0)
 	noOptions := true
-	for article := range r.voteStore {
+	for _, article := range r.voteStore.GetArticles() {
 		_, ok := r.consumed[article]
 		if ok {
 			continue

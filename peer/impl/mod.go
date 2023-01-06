@@ -2,6 +2,12 @@ package impl
 
 import (
 	"crypto/ecdsa"
+	"crypto/x509"
+	"math/rand"
+	"sort"
+	"sync"
+	"time"
+
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
@@ -9,9 +15,6 @@ import (
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"math/rand"
-	"sort"
-	"sync"
 )
 
 // NewPeer creates a new peer. You can change the content and location of this
@@ -36,6 +39,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	}
 
 	catalog := make(peer.Catalog)
+	recommender := NewRecommender(&conf, &voteStore)
 
 	n := &node{
 		conf:                  conf,
@@ -50,6 +54,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		voteStore:             voteStore,
 		catalog:               catalog,
 		pkMap:                 pkMap,
+		recommender:           recommender,
 	}
 
 	n.requestManager = request.NewRequestManager(n, n.conf.BackoffDataRequest)
@@ -76,6 +81,7 @@ type node struct {
 	catalog               peer.Catalog
 	requestManager        request.Manager
 	pkMap                 map[string]ecdsa.PublicKey
+	recommender           Recommender
 }
 
 func (n *node) GetNeighbors(excluded string) []string {
@@ -537,6 +543,12 @@ func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet
 
 	n.summaryStore.Set(articleSummaryMessage.ArticleID, *articleSummaryMessage)
 
+	timeout := time.Time{} // Zero value
+	if n.conf.VoteTimeout != 0 {
+		timeout = articleSummaryMessage.Timestamp.Add(n.conf.VoteTimeout)
+	}
+	n.voteStore.Register(articleSummaryMessage.ArticleID, timeout)
+
 	// TODO: download this file with probability p
 
 	return nil
@@ -564,7 +576,22 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 
 	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
 
-	if pkt.Header.Source == voteMessage.UserID {
+	pkix, err := x509.ParsePKIXPublicKey(voteMessage.PublicKey)
+	if err != nil {
+		return xerrors.Errorf("failed to parse vote public key: %v", err)
+	}
+
+	pub, ok := pkix.(*ecdsa.PublicKey)
+	if !ok {
+		return xerrors.Errorf("wrong vote public key type")
+	}
+
+	if !voteMessage.Verify(*pub) {
+		return nil
+	}
+
+	// Don't count your own votes
+	if !pub.Equal(n.recommender.key.PublicKey) {
 		n.voteStore.Add(*voteMessage)
 	}
 

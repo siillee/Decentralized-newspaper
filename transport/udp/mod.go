@@ -1,11 +1,12 @@
 package udp
 
 import (
-	"golang.org/x/xerrors"
 	"net"
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/xerrors"
 
 	"go.dedis.ch/cs438/transport"
 )
@@ -103,7 +104,7 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 
 	_, err = conn.Write(buf)
 	if err != nil {
-		return xerrors.Errorf("failed to write buffer: %v", err)
+		return xerrors.Errorf("failed to write buffer [%v]: %v", len(buf), err)
 	}
 
 	s.outs.add(pkt)

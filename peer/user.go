@@ -2,8 +2,9 @@ package peer
 
 import (
 	"crypto/ecdsa"
-	"go.dedis.ch/cs438/types"
 	"io"
+
+	"go.dedis.ch/cs438/types"
 )
 
 type User interface {
@@ -16,6 +17,8 @@ type User interface {
 	Vote(articleID string) error
 
 	GetSummary(articleID string) types.ArticleSummaryMessage
+
+	GetVoteStore() any // Used for testing
 
 	AddPublicKey(pk ecdsa.PublicKey, userID string)
 }

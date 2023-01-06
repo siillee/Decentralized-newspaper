@@ -2,6 +2,7 @@ package impl
 
 import (
 	"crypto/ecdsa"
+	"crypto/x509"
 	"io"
 	"math"
 	"regexp"
@@ -104,11 +105,23 @@ func (n *node) Comment(comment, articleID string) error {
 }
 
 func (n *node) Vote(articleID string) error {
+	pub := n.recommender.key.PublicKey
+	bytes, err := x509.MarshalPKIXPublicKey(&pub)
+	if err != nil {
+		return xerrors.Errorf("failed to marshal vote publick key: %v", err)
+	}
+
 	voteMessage := types.VoteMessage{
 		ArticleID: articleID,
-		UserID:    n.GetAddress(),
+		PublicKey: bytes,
 		Timestamp: time.Now(),
 	}
+
+	bytes, err = voteMessage.Sign(n.recommender.key)
+	if err != nil {
+		return xerrors.Errorf("failed to sign vote message: %v", err)
+	}
+	voteMessage.Signature = bytes
 
 	voteTransportMessage, err := types.ToTransport(voteMessage)
 	if err != nil {
@@ -120,6 +133,10 @@ func (n *node) Vote(articleID string) error {
 
 func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 	return n.summaryStore.Get(articleID)
+}
+
+func (n *node) GetVoteStore() any {
+	return n.voteStore
 }
 
 func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {

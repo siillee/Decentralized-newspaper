@@ -23,7 +23,7 @@ type CommentMessage struct {
 
 type VoteMessage struct {
 	ArticleID string
-	UserID    string
+	PublicKey []byte
 	Timestamp time.Time
 	Signature []byte
 }

@@ -142,6 +142,13 @@ type configTemplate struct {
 	dataRequestBackoff peer.Backoff
 
 	privateKey *ecdsa.PrivateKey
+
+	recommendationSetSize uint
+	positiveFactor        float64
+	negativeFactor        float64
+	initialScore          float64
+	overwhelmingThreshold float64
+	voteTimeout           time.Duration
 }
 
 func newConfigTemplate() configTemplate {
@@ -169,6 +176,13 @@ func newConfigTemplate() configTemplate {
 			Factor:  2,
 			Retry:   5,
 		},
+
+		recommendationSetSize: 5,
+		positiveFactor:        2.0,
+		negativeFactor:        2.0,
+		initialScore:          2.0,
+		overwhelmingThreshold: 2.0,
+		voteTimeout:           time.Hour * 24 * 7 * 2,
 	}
 }
 
@@ -257,6 +271,48 @@ func WithPrivateKey(key *ecdsa.PrivateKey) Option {
 	}
 }
 
+// WithRecommendationSetSize sets a specific recommendation set size.
+func WithRecommendationSetSize(setSize uint) Option {
+	return func(ct *configTemplate) {
+		ct.recommendationSetSize = setSize
+	}
+}
+
+// WithPositiveFactor sets a specific dsybil positive factor.
+func WithPositiveFactor(factor float64) Option {
+	return func(ct *configTemplate) {
+		ct.positiveFactor = factor
+	}
+}
+
+// WithNegativeFactor sets a specific dsybil negative factor.
+func WithNegativeFactor(factor float64) Option {
+	return func(ct *configTemplate) {
+		ct.negativeFactor = factor
+	}
+}
+
+// WithInitialScore sets a specific dsybil initial score.
+func WithInitialScore(score float64) Option {
+	return func(ct *configTemplate) {
+		ct.initialScore = score
+	}
+}
+
+// WithOverwhelmingThreshold sets a specific dsybil overwhelming threshold.
+func WithOverwhelmingThreshold(threshold float64) Option {
+	return func(ct *configTemplate) {
+		ct.overwhelmingThreshold = threshold
+	}
+}
+
+// WithVoteTimeout sets a specific dsybil vote timeout.
+func WithVoteTimeout(timeout time.Duration) Option {
+	return func(ct *configTemplate) {
+		ct.voteTimeout = timeout
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -281,6 +337,12 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.ChunkSize = template.chunkSize
 	config.BackoffDataRequest = template.dataRequestBackoff
 	config.PrivateKey = template.privateKey
+	config.RecommendationSetSize = template.recommendationSetSize
+	config.PositiveFactor = template.positiveFactor
+	config.NegativeFactor = template.negativeFactor
+	config.InitialScore = template.initialScore
+	config.OverwhelmingThreshold = template.overwhelmingThreshold
+	config.VoteTimeout = template.voteTimeout
 
 	node := f(config)
 
