@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+const (
+	TimeFormat = "2006-01-02 15:04:05"
+)
+
 // -----------------------------------------------------------------------------
 // ArticleSummaryMessage
 
@@ -28,6 +32,7 @@ func (a ArticleSummaryMessage) String() string {
 	fmt.Fprintf(out, "Title: \t %s \n", a.Title)
 	fmt.Fprintf(out, "UserID: \t %s \n", a.UserID)
 	fmt.Fprintf(out, "Signature: %x \n", a.Signature)
+	fmt.Fprintf(out, "Timestamp: \t %s \n", a.Timestamp.Format(TimeFormat))
 
 	return out.String()
 }
@@ -72,7 +77,7 @@ func (c CommentMessage) Name() string {
 func (c CommentMessage) String() string {
 	out := new(strings.Builder)
 
-	fmt.Fprintf(out, "%s - [%s] :  %s \n", c.ArticleID, c.UserID, c.Content)
+	fmt.Fprintf(out, "%s - [%s] @ %s :  %s \n", c.ArticleID, c.UserID, c.Timestamp.Format(TimeFormat), c.Content)
 
 	return out.String()
 }
@@ -115,7 +120,7 @@ func (v VoteMessage) Name() string {
 func (v VoteMessage) String() string {
 	out := new(strings.Builder)
 
-	fmt.Fprintf(out, "(%s : %s) \n", v.ArticleID, v.UserID)
+	fmt.Fprintf(out, "(%s : %s) @ %s \n", v.ArticleID, v.UserID, v.Timestamp.Format(TimeFormat))
 
 	return out.String()
 }
