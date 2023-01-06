@@ -49,6 +49,7 @@ func (a ArticleSummaryMessage) Hash() []byte {
 	h.Write([]byte(a.Title))
 	//h.Write([]byte(a.ShortDescription))
 	h.Write([]byte(a.Metahash))
+	h.Write([]byte(a.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 
@@ -92,6 +93,7 @@ func (c CommentMessage) Hash() []byte {
 	h.Write([]byte(c.ArticleID))
 	h.Write([]byte(c.UserID))
 	h.Write([]byte(c.Content))
+	h.Write([]byte(c.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 
@@ -134,6 +136,7 @@ func (v VoteMessage) Hash() []byte {
 	h := crypto.SHA256.New()
 	h.Write([]byte(v.ArticleID))
 	h.Write([]byte(v.UserID))
+	h.Write([]byte(v.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 
