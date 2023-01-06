@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"crypto/ecdsa"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
@@ -13,6 +14,7 @@ type Peer interface {
 	Service
 	Messaging
 	DataSharing
+	User
 }
 
 // Factory is the type of function we are using to create new instances of
@@ -60,6 +62,9 @@ type Configuration struct {
 	BackoffDataRequest Backoff
 
 	Storage storage.Storage
+
+	// Contains public and private key
+	PrivateKey *ecdsa.PrivateKey
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

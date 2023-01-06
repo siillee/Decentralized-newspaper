@@ -1,6 +1,7 @@
 package impl
 
 import (
+	"crypto/ecdsa"
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
@@ -19,11 +20,20 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	routingTable := concurrent.NewRoutingTable()
 	view := concurrent.NewView()
 	rumorsStore := concurrent.NewRumorsStore()
+	summaryStore := concurrent.NewSummaryStore()
+	voteStore := concurrent.NewVoteStore()
+	commentStore := concurrent.NewCommentStore()
 	ackChannels := concurrent.NewAckChannels()
 
 	// the peer's routing table should contain one element, the peer’s address and relay to itself
 	peerAddress := conf.Socket.GetAddress()
 	routingTable.AddEntry(peerAddress, peerAddress)
+
+	// mapping between peer address (or userID) and their public key
+	pkMap := make(map[string]ecdsa.PublicKey)
+	if conf.PrivateKey != nil {
+		pkMap[peerAddress] = conf.PrivateKey.PublicKey
+	}
 
 	catalog := make(peer.Catalog)
 
@@ -35,7 +45,11 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		view:                  view,
 		ackChannels:           ackChannels,
 		rumorsStore:           rumorsStore,
+		summaryStore:          summaryStore,
+		commentStore:          commentStore,
+		voteStore:             voteStore,
 		catalog:               catalog,
+		pkMap:                 pkMap,
 	}
 
 	n.requestManager = request.NewRequestManager(n, n.conf.BackoffDataRequest)
@@ -56,8 +70,12 @@ type node struct {
 	view                  concurrent.View
 	ackChannels           concurrent.AckChannels
 	rumorsStore           concurrent.RumorsStore
+	summaryStore          concurrent.SummaryStore
+	voteStore             concurrent.VoteStore
+	commentStore          concurrent.CommentStore
 	catalog               peer.Catalog
 	requestManager        request.Manager
+	pkMap                 map[string]ecdsa.PublicKey
 }
 
 func (n *node) GetNeighbors(excluded string) []string {
@@ -502,4 +520,53 @@ func (n *node) ExecSearchReplyMessage(msg types.Message, pkt transport.Packet) e
 	}
 
 	return n.requestManager.ReceiveSearchReply(searchReplyMessage)
+}
+
+func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet) error {
+	articleSummaryMessage, ok := msg.(*types.ArticleSummaryMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] article summary message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	if articleSummaryMessage.UserID != "" && !articleSummaryMessage.Verify(n.pkMap[articleSummaryMessage.UserID]) {
+		return nil
+	}
+
+	n.summaryStore.Set(articleSummaryMessage.ArticleID, *articleSummaryMessage)
+
+	// TODO: download this file with probability p
+
+	return nil
+}
+
+func (n *node) ExecCommentMessage(msg types.Message, pkt transport.Packet) error {
+	commentMessage, ok := msg.(*types.CommentMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] comment message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	n.commentStore.Add(*commentMessage)
+	return nil
+}
+
+func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
+	voteMessage, ok := msg.(*types.VoteMessage)
+
+	if !ok {
+		return xerrors.Errorf("wrong type: %T", msg)
+	}
+
+	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
+
+	if pkt.Header.Source == voteMessage.UserID {
+		n.voteStore.Add(*voteMessage)
+	}
+
+	return nil
 }

@@ -29,6 +29,9 @@ test_unit_hw2:
 test_unit_hw3:
 	go test -v -race -run Test_HW3 ./peer/tests/unit
 
+test_unit_basic_features:
+	go test -v -race -run Test_Basic_Features ./peer/tests/unit
+
 test_int_hw0:
 	go test -timeout 40m -v -race -run Test_HW0 ./peer/tests/integration
 

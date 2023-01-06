@@ -28,30 +28,13 @@ func (n *node) Upload(data io.Reader) (string, error) {
 	buf = buf[:nRead]
 
 	nChunks := int(math.Ceil(float64(nRead) / float64(n.conf.ChunkSize)))
-	chunks := make([][]byte, nChunks)
-	chunkHashes := make([]string, nChunks)
 
+	chunkHashes, chunks := n.DivideIntoChunks(buf, nChunks)
 	for i := 0; i < nChunks; i++ {
-		start := int(n.conf.ChunkSize) * i
-		end := start + int(n.conf.ChunkSize)
-		if end > nRead {
-			end = start + (nRead % int(n.conf.ChunkSize)) // last chunk
-		}
-
-		chunks[i] = buf[start:end]
-		chunkHashes[i] = sha256Encode(chunks[i])
-
 		blobStore.Set(chunkHashes[i], chunks[i])
 	}
 
-	metaHashBuf := make([]byte, nChunks*32)
-	for i := 0; i < nChunks; i++ {
-		sha := sha256(chunks[i])
-		for j := 0; j < 32; j++ {
-			metaHashBuf[i*32+j] = sha[j]
-		}
-	}
-	metaHash := sha256Encode(metaHashBuf)
+	metaHash := n.ComputeMetaHash(chunks, nChunks)
 	metaFile := []byte(strings.Join(chunkHashes, peer.MetafileSep))
 	blobStore.Set(metaHash, metaFile)
 	return metaHash, nil
@@ -64,6 +47,34 @@ func sha256(x []byte) []byte {
 
 func sha256Encode(x []byte) string {
 	return hex.EncodeToString(sha256(x))
+}
+
+func (n *node) DivideIntoChunks(content []byte, nChunks int) ([]string, [][]byte) {
+	chunks := make([][]byte, nChunks)
+	chunkHashes := make([]string, nChunks)
+
+	for i := 0; i < nChunks; i++ {
+		start := int(n.conf.ChunkSize) * i
+		end := start + int(n.conf.ChunkSize)
+		if end > len(content) {
+			end = start + (len(content) % int(n.conf.ChunkSize)) // last chunk
+		}
+
+		chunks[i] = content[start:end]
+		chunkHashes[i] = sha256Encode(chunks[i])
+	}
+	return chunkHashes, chunks
+}
+
+func (n *node) ComputeMetaHash(chunks [][]byte, nChunks int) string {
+	metaHashBuf := make([]byte, nChunks*32)
+	for i := 0; i < nChunks; i++ {
+		sha := sha256(chunks[i])
+		for j := 0; j < 32; j++ {
+			metaHashBuf[i*32+j] = sha[j]
+		}
+	}
+	return sha256Encode(metaHashBuf)
 }
 
 func (n *node) GetCatalog() peer.Catalog {
@@ -80,7 +91,7 @@ func (n *node) Download(metahash string) ([]byte, error) {
 	if len(metafile) == 0 {
 		dest, err := n.catalog.GetRandomPeer(metahash)
 		if err != nil {
-			return nil, xerrors.Errorf("[%s] unable to get the metafile", n.GetAddress())
+			return nil, xerrors.Errorf("[%s] unable to get the metafile, %v", n.GetAddress(), err)
 		}
 
 		metafile, err = n.requestManager.SendDataRequest(dest, metahash)
