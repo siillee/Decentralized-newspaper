@@ -142,3 +142,24 @@ func (n *node) GetVoteStore() any {
 func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {
 	n.pkMap[userID] = pk
 }
+
+func (n *node) Like(articleID string) error {
+	n.recommender.Like(articleID)
+	return n.Vote(articleID)
+}
+
+func (n *node) Dislike(articleID string) {
+	n.recommender.Dislike(articleID)
+}
+
+func (n *node) GetRecommendations() []string {
+	return n.recommender.GetRecommendations()
+}
+
+func (n *node) RefreshRecommendations() uint {
+	return n.recommender.RefreshRecommendations()
+}
+
+func (n *node) MarkAsRead(articleID string) {
+	n.recommender.MarkAsConsumed(articleID)
+}

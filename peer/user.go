@@ -21,4 +21,14 @@ type User interface {
 	GetVoteStore() any // Used for testing
 
 	AddPublicKey(pk ecdsa.PublicKey, userID string)
+
+	Like(articleID string) error
+
+	Dislike(articleID string)
+
+	GetRecommendations() []string
+
+	RefreshRecommendations() uint
+
+	MarkAsRead(articleID string)
 }

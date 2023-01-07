@@ -10,23 +10,6 @@ import (
 	"go.dedis.ch/cs438/peer/impl/concurrent"
 )
 
-func (n *node) Like(articleID string) error {
-	n.recommender.Like(articleID)
-	return n.Vote(articleID)
-}
-
-func (n *node) Dislike(articleID string) {
-	n.recommender.Dislike(articleID)
-}
-
-func (n *node) GetRecommendations() []string {
-	return n.recommender.GetRecommendations()
-}
-
-func (n *node) RefreshRecommendations() uint {
-	return n.recommender.RefreshRecommendations()
-}
-
 func NewRecommender(conf *peer.Configuration, voteStore *concurrent.VoteStore) Recommender {
 	EC := elliptic.P256()
 	key, _ := ecdsa.GenerateKey(EC, crand.Reader) // TODO: error?
@@ -88,6 +71,8 @@ func (r *Recommender) Like(articleID string) {
 			r.trustStore[voter] *= r.conf.PositiveFactor
 		}
 	}
+
+	r.MarkAsConsumed(articleID)
 }
 
 func (r *Recommender) Dislike(articleID string) {
@@ -95,6 +80,7 @@ func (r *Recommender) Dislike(articleID string) {
 	for _, voter := range score.voters {
 		r.trustStore[voter] *= r.conf.NegativeFactor
 	}
+	r.MarkAsConsumed(articleID)
 }
 
 func (r *Recommender) GetRecommendations() []string {
@@ -126,6 +112,10 @@ func (r *Recommender) RefreshRecommendations() uint {
 		return RecPartial
 	}
 	return RecSuccess
+}
+
+func (r *Recommender) MarkAsConsumed(articleID string) {
+	r.consumed[articleID] = true
 }
 
 func (r *Recommender) calculateArticleScore(articleID string) ArticleScore {
@@ -175,7 +165,7 @@ func (r *Recommender) pickArticle() (uint, string) {
 	}
 
 	selected := options[rand.Intn(len(options))]
-	r.consumed[selected] = true
+	r.MarkAsConsumed(selected)
 
 	return RecSuccess, selected
 }

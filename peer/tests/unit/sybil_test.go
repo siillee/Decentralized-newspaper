@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
+	"go.dedis.ch/cs438/peer/impl"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/transport/channel"
@@ -18,7 +20,7 @@ import (
 
 // Send an article summary followed by a vote for that article.
 // Check if both messages were recorded as expected in the vote store.
-func Test_Sybil_Valid_Vote(t *testing.T) {
+func Test_Sybil_Vote_Valid(t *testing.T) {
 	transp := channel.NewTransport()
 
 	EC := elliptic.P256()
@@ -102,7 +104,7 @@ func Test_Sybil_Valid_Vote(t *testing.T) {
 // Send a vote for an article that doesn't exist (or hasn't been received yet).
 // Check if no valid articles are recorded, but vote is recorded
 // (so it can be applied once summary is received).
-func Test_Sybil_Invalid_Vote(t *testing.T) {
+func Test_Sybil_Vote_Invalid(t *testing.T) {
 	transp := channel.NewTransport()
 
 	EC := elliptic.P256()
@@ -245,7 +247,7 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 }
 
 // Send 2 votes for an article and make sure both are recorded.
-func Test_Sybil_No_Timeouts(t *testing.T) {
+func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	transp := channel.NewTransport()
 
 	EC := elliptic.P256()
@@ -580,4 +582,250 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	voters = voteStore.Get(articles[0])
 	require.Len(t, voters, 1)
 	require.Contains(t, voters, string(pub2Bytes))
+}
+
+// Two nodes. Some articles are published. Node 1 likes two articles. Node 2 likes the first article node 1 liked.
+// Node 2 is expected to get the second article node 1 liked in their recommendations.
+func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
+	transp := channel.NewTransport()
+
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
+		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
+		z.WithInitialScore(10))
+	defer node1.Stop()
+
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
+		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
+		z.WithInitialScore(10))
+	defer node2.Stop()
+
+	node1.AddPeer(node2.GetAddr())
+	node2.AddPeer(node1.GetAddr())
+
+	time.Sleep(2 * time.Second)
+
+	type articleObj struct {
+		title   string
+		content string
+		id      string
+	}
+	articles := []articleObj{
+		{
+			title:   "Article 1",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 2",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 3",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 4",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 5",
+			content: "---Placeholder content---",
+		}}
+
+	for i, art := range articles {
+		data := bytes.NewBuffer([]byte(art.content))
+
+		articleID, err := node1.PublishArticle(art.title, data)
+		require.NoError(t, err)
+
+		art.id = articleID
+		articles[i] = art
+	}
+
+	goodArticleIndexes := []int{1, 3}
+	goodArticleIDs := make([]string, 0)
+
+	for i, art := range articles {
+		isBad := true
+		for _, ind := range goodArticleIndexes {
+			if i == ind {
+				isBad = false
+			}
+		}
+		if isBad {
+			continue
+		}
+
+		err := node1.Like(art.id)
+		require.NoError(t, err)
+
+		goodArticleIDs = append(goodArticleIDs, art.id)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	err := node2.Like(goodArticleIDs[0])
+	require.NoError(t, err)
+
+	status := node2.RefreshRecommendations()
+	require.Equal(t, impl.RecSuccess, status)
+
+	recs := node2.GetRecommendations()
+	require.Len(t, recs, 1)
+	require.Equal(t, goodArticleIDs[1], recs[0])
+}
+
+// Two nodes. Some articles are published. Node 1 likes two articles.
+// A bot sends 10 votes for a bad article.
+// Node 2 likes the first article node 1 liked.
+// Node 2 is expected to get the second article node 1 liked in their recommendations.
+func Test_Sybil_Recommended_With_Botting(t *testing.T) {
+	transp := channel.NewTransport()
+
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
+		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
+		z.WithInitialScore(10))
+	defer node1.Stop()
+
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
+		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
+		z.WithInitialScore(10))
+	defer node2.Stop()
+
+	node1.AddPeer(node2.GetAddr())
+	node2.AddPeer(node1.GetAddr())
+
+	time.Sleep(2 * time.Second)
+
+	type articleObj struct {
+		title   string
+		content string
+		id      string
+	}
+	articles := []articleObj{
+		{
+			title:   "Article 1",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 2",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 3",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 4",
+			content: "---Placeholder content---",
+		},
+		{
+			title:   "Article 5",
+			content: "---Placeholder content---",
+		}}
+
+	for i, art := range articles {
+		data := bytes.NewBuffer([]byte(art.content))
+
+		articleID, err := node1.PublishArticle(art.title, data)
+		require.NoError(t, err)
+
+		art.id = articleID
+		articles[i] = art
+	}
+
+	badArticleIndex := 0
+	goodArticleIndexes := []int{1, 3}
+	goodArticleIDs := make([]string, 0)
+
+	for i, art := range articles {
+		isBad := true
+		for _, ind := range goodArticleIndexes {
+			if i == ind {
+				isBad = false
+			}
+		}
+		if isBad {
+			continue
+		}
+
+		err := node1.Like(art.id)
+		require.NoError(t, err)
+
+		goodArticleIDs = append(goodArticleIDs, art.id)
+	}
+
+	botSock, err := transp.CreateSocket("127.0.0.1:0")
+	require.NoError(t, err)
+	defer botSock.Close()
+
+	EC := elliptic.P256()
+
+	for i := 0; i < 10; i++ {
+		keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+		require.NoError(t, err)
+
+		pubBytes, err := x509.MarshalPKIXPublicKey(&keys.PublicKey)
+		require.NoError(t, err)
+		voteMessage := types.VoteMessage{
+			ArticleID: articles[badArticleIndex].id,
+			PublicKey: pubBytes,
+			Timestamp: time.Now(),
+		}
+		signBytes, err := voteMessage.Sign(keys)
+		require.NoError(t, err)
+		voteMessage.Signature = signBytes
+		voteTransportMessage, err := types.ToTransport(voteMessage)
+		require.NoError(t, err)
+		header := transport.NewHeader(
+			botSock.GetAddress(), // source
+			botSock.GetAddress(), // relay
+			node2.GetAddr(),      // destination
+			0,                    // TTL
+		)
+		pkt := transport.Packet{
+			Header: &header,
+			Msg:    &voteTransportMessage,
+		}
+
+		err = botSock.Send(node2.GetAddr(), pkt, 0)
+		require.NoError(t, err)
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	voteStore, ok := node2.GetVoteStore().(concurrent.VoteStore)
+	require.True(t, ok)
+
+	articleVotes := voteStore.GetArticles()
+	require.Len(t, articleVotes, len(articles))
+
+	for i, art := range articles {
+		isBad := i == badArticleIndex
+		isGood := false
+		for _, j := range goodArticleIndexes {
+			if i == j {
+				isGood = true
+			}
+		}
+
+		voters := voteStore.Get(art.id)
+
+		if isBad {
+			require.Len(t, voters, 10)
+		} else if isGood {
+			require.Len(t, voters, 1)
+		} else {
+			require.Len(t, voters, 0)
+		}
+	}
+
+	err = node2.Like(goodArticleIDs[0])
+	require.NoError(t, err)
+
+	status := node2.RefreshRecommendations()
+	require.Equal(t, impl.RecSuccess, status)
+
+	recs := node2.GetRecommendations()
+	require.Len(t, recs, 1)
+	require.Equal(t, goodArticleIDs[1], recs[0])
 }
