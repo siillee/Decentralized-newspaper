@@ -2,12 +2,13 @@ package impl
 
 import (
 	"errors"
+	"time"
+
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"time"
 )
 
 // Start implements peer.Service
@@ -22,6 +23,8 @@ func (n *node) Start() error {
 	go n.antiEntropyMechanism()
 
 	go n.heartbeatMechanism()
+
+	n.GetDirectoryServerKeys()
 
 	return nil
 }
@@ -52,6 +55,14 @@ func (n *node) RegisterHandlers() {
 		types.CommentMessage{},
 		types.VoteMessage{},
 		types.DHPublicKeyMessage{},
+		types.OnionMessage{},
+		types.KeyExchangeRequestMessage{},
+		types.KeyExchangeReplyMessage{},
+		types.TorNodeInfoRequestMessage{},
+		types.TorNodeInfoReplyMessage{},
+		types.AnonymousArticleSummaryMessage{},
+		types.AnonymousDownloadRequestMessage{},
+		types.AnonymousDownloadReplyMessage{},
 	}
 	handlers := []registry.Exec{
 		n.ExecChatMessage,
@@ -68,6 +79,14 @@ func (n *node) RegisterHandlers() {
 		n.ExecCommentMessage,
 		n.ExecVoteMessage,
 		n.ExecDHPublicKeyMessage,
+		n.ExecOnionMessage,
+		n.ExecKeyExchangeRequestMessage,
+		n.ExecKeyExchangeReplyMessage,
+		n.ExecTorNodeInfoRequestMessage,
+		n.ExecTorNodeInfoReplyMessage,
+		n.ExecAnonymousArticleSummaryMessage,
+		n.ExecAnonymousDownloadRequestMessage,
+		n.ExecAnonymousDownloadReplyMessage,
 	}
 	for i, msgType := range handledTypes {
 		n.conf.MessageRegistry.RegisterMessageCallback(msgType, handlers[i])

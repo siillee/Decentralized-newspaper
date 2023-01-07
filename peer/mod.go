@@ -2,11 +2,12 @@ package peer
 
 import (
 	"crypto/ecdsa"
+	"math/big"
+	"time"
+
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
-	"math/big"
-	"time"
 )
 
 // Peer defines the interface of a peer in the Peerster system. It embeds all
@@ -16,6 +17,7 @@ type Peer interface {
 	Messaging
 	DataSharing
 	User
+	Tor
 }
 
 // Factory is the type of function we are using to create new instances of

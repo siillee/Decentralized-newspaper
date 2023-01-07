@@ -3,6 +3,11 @@ package impl
 import (
 	"crypto/ecdsa"
 	rd "crypto/rand"
+	"math/big"
+	"math/rand"
+	"sort"
+	"sync"
+
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
@@ -10,10 +15,6 @@ import (
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"math/big"
-	"math/rand"
-	"sort"
-	"sync"
 )
 
 // NewPeer creates a new peer. You can change the content and location of this
@@ -41,19 +42,23 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	catalog := make(peer.Catalog)
 
 	n := &node{
-		conf:                  conf,
-		open:                  false,
-		routingTable:          routingTable,
-		currentSequenceNumber: 0,
-		view:                  view,
-		ackChannels:           ackChannels,
-		rumorsStore:           rumorsStore,
-		summaryStore:          summaryStore,
-		commentStore:          commentStore,
-		voteStore:             voteStore,
-		catalog:               catalog,
-		pkMap:                 pkMap,
-		dhKeyStore:            dhKeyStore,
+		conf:                     conf,
+		open:                     false,
+		routingTable:             routingTable,
+		currentSequenceNumber:    0,
+		view:                     view,
+		ackChannels:              ackChannels,
+		rumorsStore:              rumorsStore,
+		summaryStore:             summaryStore,
+		commentStore:             commentStore,
+		voteStore:                voteStore,
+		catalog:                  catalog,
+		pkMap:                    pkMap,
+		dhKeyStore:               dhKeyStore,
+		directory:                types.Directory{Dir: make(map[string]types.TorNode)},
+		proxyCircuits:            types.ConcurrentProxyCircuits{ProxyCircuits: make(map[string]*types.ProxyCircuit)},
+		relayCircuits:            types.ConcurrentRelayCircuits{RelayCircuits: make(map[string]*types.RelayCircuit)},
+		keyExchangeReplyChannels: types.KeyExchangeReplyChannels{ChannelMap: make(map[string]chan types.KeyExchangeReplyMessage)},
 	}
 
 	n.requestManager = request.NewRequestManager(n, n.conf.BackoffDataRequest)
@@ -67,20 +72,24 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 type node struct {
 	peer.Peer
 	sync.Mutex
-	conf                  peer.Configuration
-	open                  bool
-	routingTable          concurrent.RoutingTable
-	currentSequenceNumber uint
-	view                  concurrent.View
-	ackChannels           concurrent.AckChannels
-	rumorsStore           concurrent.RumorsStore
-	summaryStore          concurrent.SummaryStore
-	voteStore             concurrent.VoteStore
-	commentStore          concurrent.CommentStore
-	dhKeyStore            concurrent.DHKeyStore
-	catalog               peer.Catalog
-	requestManager        request.Manager
-	pkMap                 map[string]ecdsa.PublicKey
+	conf                     peer.Configuration
+	open                     bool
+	routingTable             concurrent.RoutingTable
+	currentSequenceNumber    uint
+	view                     concurrent.View
+	ackChannels              concurrent.AckChannels
+	rumorsStore              concurrent.RumorsStore
+	summaryStore             concurrent.SummaryStore
+	voteStore                concurrent.VoteStore
+	commentStore             concurrent.CommentStore
+	dhKeyStore               concurrent.DHKeyStore
+	catalog                  peer.Catalog
+	requestManager           request.Manager
+	pkMap                    map[string]ecdsa.PublicKey
+	directory                types.Directory
+	proxyCircuits            types.ConcurrentProxyCircuits
+	relayCircuits            types.ConcurrentRelayCircuits
+	keyExchangeReplyChannels types.KeyExchangeReplyChannels
 }
 
 func (n *node) GetNeighbors(excluded string) []string {
