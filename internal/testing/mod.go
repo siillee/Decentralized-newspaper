@@ -181,7 +181,7 @@ func newConfigTemplate() configTemplate {
 		positiveFactor:        2.0,
 		negativeFactor:        2.0,
 		initialScore:          2.0,
-		overwhelmingThreshold: 2.0,
+		overwhelmingThreshold: 10.0,
 		voteTimeout:           time.Hour * 24 * 7 * 2,
 	}
 }

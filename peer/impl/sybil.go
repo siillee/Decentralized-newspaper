@@ -78,7 +78,7 @@ func (r *Recommender) Like(articleID string) {
 func (r *Recommender) Dislike(articleID string) {
 	score := r.calculateArticleScore(articleID)
 	for _, voter := range score.voters {
-		r.trustStore[voter] *= r.conf.NegativeFactor
+		r.trustStore[voter] /= r.conf.NegativeFactor
 	}
 	r.MarkAsConsumed(articleID)
 }
@@ -161,8 +161,12 @@ func (r *Recommender) pickArticle() (uint, string) {
 
 	options := overwhelmingArticles
 	if len(overwhelmingArticles) == 0 {
+		// log.Logger.Info().Msgf("choosing from non-overwhelming articles")
 		options = nonOverwhelmingArticles
 	}
+	// else {
+	// 	log.Logger.Info().Msgf("choosing from overwhelming articles")
+	// }
 
 	selected := options[rand.Intn(len(options))]
 	r.MarkAsConsumed(selected)

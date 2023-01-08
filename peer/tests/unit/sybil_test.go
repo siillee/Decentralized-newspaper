@@ -6,15 +6,21 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"fmt"
+	"math"
+	mrand "math/rand"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
+	log "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer/impl"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/transport/channel"
+	"go.dedis.ch/cs438/transport/udp"
 	"go.dedis.ch/cs438/types"
 )
 
@@ -828,4 +834,184 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 	recs := node2.GetRecommendations()
 	require.Len(t, recs, 1)
 	require.Equal(t, goodArticleIDs[1], recs[0])
+}
+
+func Test_Sybil_Scenario(t *testing.T) {
+	transp := udp.NewUDP()
+
+	node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
+		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1),
+		z.WithOverwhelmingThreshold(100.0), z.WithInitialScore(10.0), z.WithPositiveFactor(16.0), z.WithNegativeFactor(1_048_576.0))
+	defer node.Stop()
+
+	numOfGoodArticles := 500
+	numOfBadArticles := 500
+
+	nodeNum := 10
+	userGoodChance := 0.19
+	userBadChance := 0.005
+
+	botNetSize := 1_000
+	botGoodChance := 0.06
+	botBadChance := 0.3
+
+	feedCycles := 300
+
+	// Article creation set-up
+	type articleObj struct {
+		title   string
+		content string
+		id      string
+	}
+
+	goodArticles := make([]articleObj, numOfGoodArticles)
+	badArticles := make([]articleObj, numOfBadArticles)
+
+	// Create good articles
+	for i := 0; i < numOfGoodArticles; i++ {
+		art := articleObj{
+			title:   fmt.Sprintf("Good Article #%v", i),
+			content: "---Placeholder content---",
+			id:      "TODO: replace me",
+		}
+
+		goodArticles[i] = art
+	}
+
+	// Create bad articles
+	for i := 0; i < numOfBadArticles; i++ {
+		art := articleObj{
+			title:   fmt.Sprintf("Bad Article #%v", i),
+			content: "---Placeholder content---",
+			id:      "TODO: replace me",
+		}
+
+		badArticles[i] = art
+	}
+
+	// Publish good articles
+	for i, art := range goodArticles {
+		data := bytes.NewBuffer([]byte(art.content))
+
+		articleID, err := node.PublishArticle(art.title, data)
+		require.NoError(t, err)
+
+		art.id = articleID
+		goodArticles[i] = art
+	}
+
+	// Publish bad articles
+	for i, art := range badArticles {
+		data := bytes.NewBuffer([]byte(art.content))
+
+		articleID, err := node.PublishArticle(art.title, data)
+		require.NoError(t, err)
+
+		art.id = articleID
+		badArticles[i] = art
+	}
+
+	time.Sleep(1 * time.Second)
+
+	// Voting sim set-up
+	EC := elliptic.P256()
+
+	voteStore, ok := node.GetVoteStore().(concurrent.VoteStore)
+	require.True(t, ok)
+
+	botVoteFun := func(articleID string, publicKey []byte, privateKey *ecdsa.PrivateKey) {
+		voteMessage := types.VoteMessage{
+			ArticleID: articleID,
+			PublicKey: publicKey,
+			Timestamp: time.Now(),
+		}
+		signBytes, err := voteMessage.Sign(privateKey)
+		require.NoError(t, err)
+		voteMessage.Signature = signBytes
+		voteStore.Add(voteMessage)
+	}
+
+	simulateVotingPattern := func(numOfBots int, goodChance float64, badChance float64) {
+		for i := 0; i < numOfBots; i++ {
+			keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+			require.NoError(t, err)
+
+			pubBytes, err := x509.MarshalPKIXPublicKey(&keys.PublicKey)
+			require.NoError(t, err)
+
+			// Bot voting for good articles
+			for _, art := range goodArticles {
+				roll := mrand.Float64()
+
+				if roll >= goodChance {
+					continue
+				}
+
+				botVoteFun(art.id, pubBytes, keys)
+			}
+			// Bot voting for bad articles
+			for _, art := range badArticles {
+				roll := mrand.Float64()
+
+				if roll >= badChance {
+					continue
+				}
+
+				botVoteFun(art.id, pubBytes, keys)
+			}
+		}
+	}
+
+	// Simulate node article voting
+	simulateVotingPattern(nodeNum, userGoodChance, userBadChance)
+
+	// Simulate sybil attack
+	simulateVotingPattern(botNetSize, botGoodChance, botBadChance)
+
+	// Check the vote store
+	voteStore, ok = node.GetVoteStore().(concurrent.VoteStore)
+	require.True(t, ok)
+
+	articleVotes := voteStore.GetArticles()
+	require.Len(t, articleVotes, len(goodArticles)+len(badArticles))
+
+	goodVoteCount := 0
+	badVoteCount := 0
+	for _, art := range goodArticles {
+		voters := voteStore.Get(art.id)
+		goodVoteCount += len(voters)
+	}
+	for _, art := range badArticles {
+		voters := voteStore.Get(art.id)
+		badVoteCount += len(voters)
+	}
+
+	// Simulate new user's experience using the feed
+	goodRecs := 0
+	badRecs := 0
+	for i := 0; i < feedCycles; i++ {
+		status := node.RefreshRecommendations()
+		require.Equal(t, impl.RecSuccess, status)
+
+		recs := node.GetRecommendations()
+		require.Len(t, recs, 1)
+
+		articleID := recs[0]
+		summary := node.GetSummary(articleID)
+		if strings.HasPrefix(summary.Title, "Good") {
+			err := node.Like(articleID)
+			require.NoError(t, err)
+			goodRecs++
+		} else {
+			node.Dislike(articleID)
+			badRecs++
+		}
+	}
+
+	M := botNetSize
+	D := 5.0
+	expectedLoss := math.Log2(float64(M)) * D
+	marginOfError := 2 * expectedLoss
+	log.Logger.Info().Msgf("loss is %v (%v%%)", badRecs, (100.0 * float64(badRecs) / float64(feedCycles)))
+	require.Less(t, float64(badRecs), marginOfError)
 }
