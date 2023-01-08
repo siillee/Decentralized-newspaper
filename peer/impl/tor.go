@@ -1,6 +1,9 @@
 package impl
 
 import (
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -12,13 +15,14 @@ import (
 )
 
 /*
-This function gets public keys from the "directory nodes".
-In our implementation those are just 5 nodes started at the beginning.
+This function gets public keys from the "directory servers", which are functional peer nodes.
+In our implementation those are just 10 nodes started at the beginning.
 Their addresses are hard-coded in every node.
 */
 func (n *node) GetDirectoryServerKeys() {
 
-	directoryNodes := []string{"127.0.0.1:2000", "127.0.0.1:2001", "127.0.0.1:2002", "127.0.0.1:2003", "127.0.0.1:2004"}
+	directoryNodes := []string{"127.0.0.1:2000", "127.0.0.1:2001", "127.0.0.1:2002", "127.0.0.1:2003", "127.0.0.1:2004",
+		"127.0.0.1:2005", "127.0.0.1:2006", "127.0.0.1:2007", "127.0.0.1:2008", "127.0.0.1:2009"}
 
 	go func() {
 		for _, ip := range directoryNodes {
@@ -77,16 +81,17 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 		AllSharedKeys: nil,
 	}
 
-	for i, node := range torNodes {
-		// TODO: Generate parameters using Diffie-Hellman
+	for i, nodeIp := range torNodes {
+
+		myPrivateKey, myPublicKey := n.DHGenerateKeys()
 
 		keyExchangeReqMsg := types.KeyExchangeRequestMessage{
-			CircuitID:  circuit.Id,
-			Parameters: nil, // TODO: Add public key from Diffie-Hellman
+			CircuitID: circuit.Id,
+			PublicKey: myPublicKey,
 		}
 
 		if i > 0 {
-			keyExchangeReqMsg.Extend = node
+			keyExchangeReqMsg.Extend = nodeIp
 		}
 
 		onionMsg, err := CreateFullOnion(keyExchangeReqMsg, circuit)
@@ -104,11 +109,23 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 			return nil, xerrors.Errorf("error while sending onion message via direct unicast: %v", err)
 		}
 
-		// TODO: Wait for key exchange response and do something based on that.
-		// select {
-		// case keyExchangeReplyMsg := <-n.keyExchangeReplyChannels.Get(circuit.Id):
-		// 	// TODO: verify response and add shared key to circuit
-		// }
+		select {
+		case keyExchangeReplyMsg := <-n.keyExchangeReplyChannels.Get(circuit.Id):
+
+			messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
+			hashed := sha256(messageBytes)
+			if !ecdsa.VerifyASN1(n.directory.Get(nodeIp).Pk, hashed, keyExchangeReplyMsg.Signature) {
+				return nil, xerrors.Errorf("verification of key exchange reply message failed")
+			}
+
+			sharedKey, err := n.DHComputeSharedKey(myPrivateKey, keyExchangeReplyMsg.PublicKey)
+			if err != nil {
+				return nil, err
+			}
+			circuit.AllSharedKeys = append(circuit.AllSharedKeys, sharedKey.Bytes())
+		case <-time.After(time.Second * 20):
+			return nil, xerrors.Errorf("timed out while waiting for the key exchange reply message")
+		}
 	}
 
 	n.proxyCircuits.Add(circuit.Id, &circuit)
@@ -255,8 +272,6 @@ func RelayDecryption(circuit types.RelayCircuit, payload []byte) ([]byte, error)
 // SendAnonymousArticleSummaryMessage implements peer.Tor
 func (n *node) SendAnonymousArticleSummaryMessage(article types.ArticleSummaryMessage) error {
 
-	// TODO: see if this function will have Article as parameter or create the article here.
-
 	circuit, err := n.CreateRandomCircuit()
 	if err != nil {
 		return err
@@ -289,8 +304,6 @@ func (n *node) SendAnonymousArticleSummaryMessage(article types.ArticleSummaryMe
 
 // SendAnonymousDownloadRequestMessage implements peer.Tor
 func (n *node) SendAnonymousDownloadRequestMessage(title, metahash string) error {
-
-	// TODO: see what the parameters are gonna be for this function.
 
 	circuit, err := n.CreateRandomCircuit()
 	if err != nil {
@@ -446,11 +459,6 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 	return nil
 }
 
-// Possibly a good idea: KeyExchangeRequestMessage contains CircuitID and DHPublicKeyMessage, and when you execute
-// it, you execute the DHPublicKeyMessage, and in the ExecDHPublicKeyMessage, the reply is put into
-// KeyExchangeReplyMessage, with the same fields as KeyExchangeRequestMessage (just CircuitID and DHPublicKeyMessage)
-
-// But how to get the needed CircuitID????? (for the idea above) --- Maybe just put it in the DHPublicKeyMessage
 func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport.Packet) error {
 
 	keyExchangeReqMsg, ok := msg.(*types.KeyExchangeRequestMessage)
@@ -458,6 +466,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
 
+	var err error
 	relayCircuit := n.relayCircuits.Get(keyExchangeReqMsg.CircuitID)
 
 	if relayCircuit == nil {
@@ -471,15 +480,38 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			SharedKey:   nil,
 		}
 
+		myPrivateKey, myPublicKey := n.DHGenerateKeys()
+
 		keyExchangeReplyMsg := types.KeyExchangeReplyMessage{
-			CircuitID:  keyExchangeReqMsg.CircuitID,
-			Parameters: nil, // TODO: Add public key from Diffie Hellman
+			CircuitID: keyExchangeReqMsg.CircuitID,
+			PublicKey: myPublicKey,
+		}
+		messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
+		hashed := sha256(messageBytes)
+		//TODO: Sign using rsa --- ecdsa is for now
+		keyExchangeReplyMsg.Signature, err = ecdsa.SignASN1(rand.Reader, n.conf.PrivateKey, hashed)
+		if err != nil {
+			return err
 		}
 
-		keyExchangeReplyMsg.Signature = nil //TODO: Sign using rsa
-		// TODO: sending of reply and putting shared key in the newCircuit
+		sharedKey, err := n.DHComputeSharedKey(myPrivateKey, keyExchangeReqMsg.PublicKey)
+		if err != nil {
+			return err
+		}
+		newCircuit.SharedKey = sharedKey.Bytes()
+
+		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(keyExchangeReplyMsg)
+		if err != nil {
+			return xerrors.Errorf("error while marshaling key exchange reply message")
+		}
+
+		_, err = n.SendTo(newCircuit.FirstNode.Ip, transportMsg)
+		if err != nil {
+			return err
+		}
 
 		n.relayCircuits.Add(newCircuit.Id, &newCircuit)
+
 	} else if relayCircuit.NextCircuit == nil && keyExchangeReqMsg.Extend != n.conf.Socket.GetAddress() {
 		newCircuit := types.RelayCircuit{
 			Id:          xid.New().String(),
@@ -675,19 +707,11 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 			return xerrors.Errorf("error while unmarshaling article info from anonymous download message: %v", err)
 		}
 
-		// regexp := *regexp.MustCompile(articleInfo.Title)
-		// responses, err := n.SearchAll(regexp, 10, time.Millisecond*200)
-		// if err != nil {
-		// 	return xerrors.Errorf("error while searching for file name to download")
-		// }
-
-		// DownloadArticle function is from user.go
 		file, err := n.DownloadArticle(articleInfo.Title, articleInfo.Metahash)
 		if err != nil {
 			return err
 		}
 
-		// TODO: Send reply through the circuit
 		replyPayload, err := RelayEncryption(*relayCircuit, file)
 		if err != nil {
 			return err
@@ -728,12 +752,16 @@ func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet trans
 
 	if proxyCircuit != nil { // Case in which this node is the originator of the anonymous download.
 
-		// payload, err := FullDecryption(*proxyCircuit, anonymousDownloadReplyMsg.Payload)
-		// if err != nil {
-		// 	return err
-		// }
+		payload, err := FullDecryption(*proxyCircuit, anonymousDownloadReplyMsg.Payload)
+		if err != nil {
+			return err
+		}
 
-		// TODO: what to do with payload? add to blobStore, or notify some other function, etc...?
+		// Upload the downloaded file into the node's storage.
+		_, err = n.Upload(bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
 
 	} else if relayCircuit != nil { // Case in which this node is just a relay.
 

@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/hex"
-	"go.dedis.ch/cs438/peer"
-	"go.dedis.ch/cs438/types"
-	"golang.org/x/xerrors"
 	"io"
 	"math"
 	"math/rand"
 	"regexp"
 	"strings"
 	"time"
+
+	"go.dedis.ch/cs438/peer"
+	"go.dedis.ch/cs438/types"
+	"golang.org/x/xerrors"
 )
 
 const bufSize = 65000

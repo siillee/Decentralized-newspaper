@@ -2,6 +2,7 @@ package types
 
 import (
 	"crypto/ecdsa"
+	"math/big"
 	"math/rand"
 	"sync"
 
@@ -190,15 +191,15 @@ func (kepc *KeyExchangeReplyChannels) Get(id string) chan KeyExchangeReplyMessag
 
 // Structs representing messages necessary for the Diffie-Hellman key exchange protocol.
 type KeyExchangeRequestMessage struct {
-	CircuitID  string
-	Parameters []byte
-	Extend     string
+	CircuitID string
+	PublicKey *big.Int
+	Extend    string
 }
 
 type KeyExchangeReplyMessage struct {
-	CircuitID  string
-	Parameters []byte
-	Signature  []byte
+	CircuitID string
+	PublicKey *big.Int
+	Signature []byte
 }
 
 type OnionMessage struct {
