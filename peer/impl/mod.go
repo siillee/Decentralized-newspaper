@@ -1,7 +1,7 @@
 package impl
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
@@ -30,7 +30,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	routingTable.AddEntry(peerAddress, peerAddress)
 
 	// mapping between peer address (or userID) and their public key
-	pkMap := make(map[string]ecdsa.PublicKey)
+	pkMap := make(map[string]rsa.PublicKey)
 	if conf.PrivateKey != nil {
 		pkMap[peerAddress] = conf.PrivateKey.PublicKey
 	}
@@ -75,7 +75,7 @@ type node struct {
 	commentStore          concurrent.CommentStore
 	catalog               peer.Catalog
 	requestManager        request.Manager
-	pkMap                 map[string]ecdsa.PublicKey
+	pkMap                 map[string]rsa.PublicKey
 }
 
 func (n *node) GetNeighbors(excluded string) []string {

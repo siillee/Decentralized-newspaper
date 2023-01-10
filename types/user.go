@@ -2,9 +2,9 @@ package types
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
+	"go.dedis.ch/cs438/customCrypto"
 	"strings"
 )
 
@@ -53,12 +53,12 @@ func (a ArticleSummaryMessage) Hash() []byte {
 	return h.Sum(nil)
 }
 
-func (a ArticleSummaryMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
-	return ecdsa.SignASN1(rand.Reader, privateKey, a.Hash())
+func (a ArticleSummaryMessage) Sign(privateKey *rsa.PrivateKey) ([]byte, error) {
+	return customCrypto.SignRSA(privateKey, a.Hash())
 }
 
-func (a ArticleSummaryMessage) Verify(publicKey ecdsa.PublicKey) bool {
-	return ecdsa.VerifyASN1(&publicKey, a.Hash(), a.Signature)
+func (a ArticleSummaryMessage) Verify(publicKey rsa.PublicKey) bool {
+	return customCrypto.VerifyRSA(&publicKey, a.Hash(), a.Signature)
 }
 
 // -----------------------------------------------------------------------------
@@ -97,12 +97,12 @@ func (c CommentMessage) Hash() []byte {
 	return h.Sum(nil)
 }
 
-func (c CommentMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
-	return ecdsa.SignASN1(rand.Reader, privateKey, c.Hash())
+func (c CommentMessage) Sign(privateKey *rsa.PrivateKey) ([]byte, error) {
+	return customCrypto.SignRSA(privateKey, c.Hash())
 }
 
-func (c CommentMessage) Verify(publicKey ecdsa.PublicKey) bool {
-	return ecdsa.VerifyASN1(&publicKey, c.Hash(), c.Signature)
+func (c CommentMessage) Verify(publicKey rsa.PublicKey) bool {
+	return customCrypto.VerifyRSA(&publicKey, c.Hash(), c.Signature)
 }
 
 // -----------------------------------------------------------------------------
@@ -140,10 +140,10 @@ func (v VoteMessage) Hash() []byte {
 	return h.Sum(nil)
 }
 
-func (v VoteMessage) Sign(privateKey *ecdsa.PrivateKey) ([]byte, error) {
-	return ecdsa.SignASN1(rand.Reader, privateKey, v.Hash())
+func (v VoteMessage) Sign(privateKey *rsa.PrivateKey) ([]byte, error) {
+	return customCrypto.SignRSA(privateKey, v.Hash())
 }
 
-func (v VoteMessage) Verify(publicKey ecdsa.PublicKey) bool {
-	return ecdsa.VerifyASN1(&publicKey, v.Hash(), v.Signature)
+func (v VoteMessage) Verify(publicKey rsa.PublicKey) bool {
+	return customCrypto.VerifyRSA(&publicKey, v.Hash(), v.Signature)
 }

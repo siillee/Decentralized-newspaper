@@ -1,7 +1,7 @@
 package impl
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"io"
 	"math"
 	"regexp"
@@ -122,6 +122,6 @@ func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 	return n.summaryStore.Get(articleID)
 }
 
-func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {
+func (n *node) AddPublicKey(pk rsa.PublicKey, userID string) {
 	n.pkMap[userID] = pk
 }

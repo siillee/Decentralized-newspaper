@@ -2,7 +2,7 @@ package testing
 
 import (
 	"bytes"
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 
@@ -141,7 +141,7 @@ type configTemplate struct {
 
 	dataRequestBackoff peer.Backoff
 
-	privateKey *ecdsa.PrivateKey
+	privateKey *rsa.PrivateKey
 }
 
 func newConfigTemplate() configTemplate {
@@ -251,7 +251,7 @@ func WithStorage(storage storage.Storage) Option {
 }
 
 // WithPrivateKey sets a key pair (private key, public key)
-func WithPrivateKey(key *ecdsa.PrivateKey) Option {
+func WithPrivateKey(key *rsa.PrivateKey) Option {
 	return func(ct *configTemplate) {
 		ct.privateKey = key
 	}

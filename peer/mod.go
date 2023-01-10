@@ -1,7 +1,7 @@
 package peer
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
@@ -64,7 +64,7 @@ type Configuration struct {
 	Storage storage.Storage
 
 	// Contains public and private key
-	PrivateKey *ecdsa.PrivateKey
+	PrivateKey *rsa.PrivateKey
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must
