@@ -111,24 +111,25 @@ func (n *node) GetRandomNeighbor(excluded string) string {
 // Handler functions
 
 func (n *node) ExecChatMessage(msg types.Message, pkt transport.Packet) error {
-	chatMsg, ok := msg.(*types.ChatMessage)
+	_, ok := msg.(*types.ChatMessage)
 	if !ok {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] chat message received from %s", n.GetAddress(), pkt.Header.Source)
-	z.Logger.Info().Msgf("[%s] %s", n.GetAddress(), chatMsg)
+	// z.Logger.Info().Msgf("[%s] chat message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] %s", n.GetAddress(), chatMsg)
 
 	return nil
 }
 
 func (n *node) ExecRumorsMessage(msg types.Message, pkt transport.Packet) error {
+	// z.Logger.Info().Msgf("[%s] ExecRumorsMessage in", n.GetAddress())
 	rumorsMsg, ok := msg.(*types.RumorsMessage)
 	if !ok {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] rumors Message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] rumors Message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	rumorsHaveBeenRelayed := false
 	for _, rumor := range rumorsMsg.Rumors {
@@ -165,9 +166,9 @@ func (n *node) ExecRumorsMessage(msg types.Message, pkt transport.Packet) error 
 
 		neighbor := n.GetRandomNeighbor(pkt.Header.Source)
 		if neighbor == "" {
-			z.Logger.Debug().Msgf(
-				"[%s] no neighbor found (expected rumor but unable to relay it to a random neighbor", n.GetAddress(),
-			)
+			// z.Logger.Debug().Msgf(
+			// 	"[%s] no neighbor found (expected rumor but unable to relay it to a random neighbor", n.GetAddress(),
+			// )
 			continue
 		}
 
@@ -177,7 +178,7 @@ func (n *node) ExecRumorsMessage(msg types.Message, pkt transport.Packet) error 
 		}
 
 		newPkt, err1 := n.SendTo(neighbor, rumorsTransportMessage)
-		z.Logger.Info().Msgf("[%s] relay rumors message to %s", n.GetAddress(), neighbor)
+		// z.Logger.Info().Msgf("[%s] relay rumors message to %s", n.GetAddress(), neighbor)
 		if err1 != nil {
 			return xerrors.Errorf("[%s] failed to send rumors message to %s : %v", n.GetAddress(), neighbor, err)
 		}
@@ -185,19 +186,25 @@ func (n *node) ExecRumorsMessage(msg types.Message, pkt transport.Packet) error 
 
 		go n.WaitForAck(newPkt, neighbor, rumorsTransportMessage)
 	}
+	// z.Logger.Info().Msgf("[%s] ExecRumorsMessage loop left", n.GetAddress())
 
 	ackMessage := types.AckMessage{AckedPacketID: pkt.Header.PacketID, Status: n.view.Copy()}
 	ackTransportMessage, err := types.ToTransport(ackMessage)
 	if err != nil {
+		// z.Logger.Info().Msgf("[%s] ExecRumorsMessage out", n.GetAddress())
 		return xerrors.Errorf("[%s] failed to send ack to %s: %v", n.GetAddress(), pkt.Header.Source, err)
 	}
 
+	// z.Logger.Info().Msgf("[%s] ExecRumorsMessage finna send ack", n.GetAddress())
 	_, err = n.SendTo(pkt.Header.Source, ackTransportMessage)
-	z.Logger.Info().Msgf("[%s] send ack (id: %s) to %s", n.GetAddress(), pkt.Header.PacketID, pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] ExecRumorsMessage did send ack (or error)", n.GetAddress())
+	// z.Logger.Info().Msgf("[%s] send ack (id: %s) to %s", n.GetAddress(), pkt.Header.PacketID, pkt.Header.Source)
 	if err != nil {
+		// z.Logger.Info().Msgf("[%s] ExecRumorsMessage out", n.GetAddress())
 		return xerrors.Errorf("[%s] failed to send ack to %s: %v", n.GetAddress(), pkt.Header.Source, err)
 	}
 
+	// z.Logger.Info().Msgf("[%s] ExecRumorsMessage out", n.GetAddress())
 	return nil
 }
 
@@ -207,9 +214,9 @@ func (n *node) ExecAckMessage(msg types.Message, pkt transport.Packet) error {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf(
-		"[%s] ack Message received from %s with ackId %s:", n.GetAddress(), pkt.Header.Source, ackMsg.AckedPacketID,
-	)
+	// z.Logger.Info().Msgf(
+	// 	"[%s] ack Message received from %s with ackId %s:", n.GetAddress(), pkt.Header.Source, ackMsg.AckedPacketID,
+	// )
 
 	statusTransportMessage, err := types.ToTransport(ackMsg.Status)
 	if err != nil {
@@ -237,8 +244,8 @@ func (n *node) ExecStatusMessage(msg types.Message, pkt transport.Packet) error 
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] status Message received from %s: ", n.GetAddress(), pkt.Header.Source)
-	z.Logger.Info().Msgf("[%s] %s", n.GetAddress(), statusMessage.String())
+	// z.Logger.Info().Msgf("[%s] status Message received from %s: ", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] %s", n.GetAddress(), statusMessage.String())
 
 	// case1: The remote peer has Rumors that this peer doesn’t have.
 	case1, err := n.checkCase1(pkt, statusMessage)
@@ -248,6 +255,7 @@ func (n *node) ExecStatusMessage(msg types.Message, pkt transport.Packet) error 
 
 	// case2: This peer has Rumors that the remote peer doesn’t have.
 	case2, err := n.checkCase2(pkt, statusMessage)
+	// z.Logger.Info().Msgf("[%s] checkCase2 over and out", n.GetAddress())
 	if err != nil {
 		return xerrors.Errorf("[%s] failed to check case 2: %v", n.GetAddress(), err)
 	}
@@ -264,10 +272,10 @@ func (n *node) ExecStatusMessage(msg types.Message, pkt transport.Packet) error 
 			return xerrors.Errorf("[%s] failed to build status transport message : %v", n.GetAddress(), err)
 		}
 
-		z.Logger.Debug().Msgf(
-			"[%s] case4: both peers have the same view, continue mongering, sending status message to %s",
-			n.GetAddress(), neighbor,
-		)
+		// z.Logger.Debug().Msgf(
+		// 	"[%s] case4: both peers have the same view, continue mongering, sending status message to %s",
+		// 	n.GetAddress(), neighbor,
+		// )
 		_, err = n.SendTo(neighbor, statusTransportMessage)
 		if err != nil {
 			return xerrors.Errorf(
@@ -283,17 +291,17 @@ func (n *node) checkCase1(pkt transport.Packet, statusMessage *types.StatusMessa
 	for key, remoteValue := range statusMessage.View() {
 		localValue, ok1 := n.view.GetEntry(key)
 		if !ok1 || remoteValue > localValue {
-			z.Logger.Debug().Msgf(
-				"[%s] case1: the remote peer (%s) has Rumors that this peer doesn’t have (key:%s)",
-				n.GetAddress(), pkt.Header.Source, key,
-			)
+			// z.Logger.Debug().Msgf(
+			// 	"[%s] case1: the remote peer (%s) has Rumors that this peer doesn’t have (key:%s)",
+			// 	n.GetAddress(), pkt.Header.Source, key,
+			// )
 
 			statusTransportMessage, err := types.ToTransport(n.view.Copy())
 			if err != nil {
 				return false, xerrors.Errorf("[%s] failed to build status transport message : %v", n.GetAddress(), err)
 			}
 
-			z.Logger.Debug().Msgf("[%s] send status message back to %s", n.GetAddress(), pkt.Header.Source)
+			// z.Logger.Debug().Msgf("[%s] send status message back to %s", n.GetAddress(), pkt.Header.Source)
 			_, err = n.SendTo(pkt.Header.Source, statusTransportMessage)
 			if err != nil {
 				return false,
@@ -312,10 +320,10 @@ func (n *node) checkCase2(pkt transport.Packet, statusMessage *types.StatusMessa
 	for key, localValue := range n.view.Copy() {
 		remoteValue, ok1 := statusMessage.View()[key]
 		if !ok1 || localValue > remoteValue {
-			z.Logger.Debug().Msgf(
-				"[%s] case2:  This peer has Rumors that the remote peer (%s) doesn’t have (key:%s)",
-				n.GetAddress(), pkt.Header.Source, key,
-			)
+			// z.Logger.Debug().Msgf(
+			// 	"[%s] case2:  This peer has Rumors that the remote peer (%s) doesn’t have (key:%s)",
+			// 	n.GetAddress(), pkt.Header.Source, key,
+			// )
 			for _, rumor := range n.rumorsStore.Get(key) {
 				if rumor.Sequence > remoteValue {
 					missingRumors = append(missingRumors, rumor)
@@ -323,10 +331,10 @@ func (n *node) checkCase2(pkt transport.Packet, statusMessage *types.StatusMessa
 			}
 		}
 	}
-	z.Logger.Debug().Msgf(
-		"[%s] %d rumors were missing in remote peer (%s) ",
-		n.GetAddress(), len(missingRumors), pkt.Header.Source,
-	)
+	// z.Logger.Debug().Msgf(
+	// 	"[%s] %d rumors were missing in remote peer (%s) ",
+	// 	n.GetAddress(), len(missingRumors), pkt.Header.Source,
+	// )
 	if len(missingRumors) > 0 {
 		sort.Sort(missingRumors)
 		rumorsTransportMessage, err := types.ToTransport(types.RumorsMessage{Rumors: missingRumors})
@@ -335,10 +343,10 @@ func (n *node) checkCase2(pkt transport.Packet, statusMessage *types.StatusMessa
 				xerrors.Errorf("[%s] failed to build rumors transport message : %v", n.GetAddress(), err)
 		}
 
-		z.Logger.Info().Msgf(
-			"[%s] send %d missing rumors back to %s",
-			n.GetAddress(), len(missingRumors), pkt.Header.Source,
-		)
+		// z.Logger.Info().Msgf(
+		// 	"[%s] send %d missing rumors back to %s",
+		// 	n.GetAddress(), len(missingRumors), pkt.Header.Source,
+		// )
 
 		_, err = n.SendTo(pkt.Header.Source, rumorsTransportMessage)
 		if err != nil {
@@ -358,7 +366,7 @@ func (n *node) ExecEmptyMessage(msg types.Message, pkt transport.Packet) error {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] empty message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] empty message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	return nil
 }
@@ -370,7 +378,7 @@ func (n *node) ExecPrivateMessage(msg types.Message, pkt transport.Packet) error
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] private message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] private message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	_, authorized := privateMessage.Recipients[n.GetAddress()]
 	if authorized {
@@ -393,12 +401,12 @@ func (n *node) ExecDataRequestMessage(msg types.Message, pkt transport.Packet) e
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf(
-		"[%s] data request message received from %s for key %s",
-		n.GetAddress(),
-		pkt.Header.Source,
-		dataRequestMessage.Key,
-	)
+	// z.Logger.Info().Msgf(
+	// 	"[%s] data request message received from %s for key %s",
+	// 	n.GetAddress(),
+	// 	pkt.Header.Source,
+	// 	dataRequestMessage.Key,
+	// )
 
 	blobStore := n.conf.Storage.GetDataBlobStore()
 	content := blobStore.Get(dataRequestMessage.Key)
@@ -424,7 +432,7 @@ func (n *node) ExecDataReplyMessage(msg types.Message, pkt transport.Packet) err
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] data reply message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] data reply message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	return n.requestManager.ReceiveDataReply(dataReplyMessage)
 }
@@ -436,12 +444,12 @@ func (n *node) ExecSearchRequestMessage(msg types.Message, pkt transport.Packet)
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf(
-		"[%s] search request message received from %s (budget:%d)",
-		n.GetAddress(),
-		pkt.Header.Source,
-		searchRequestMessage.Budget,
-	)
+	// z.Logger.Info().Msgf(
+	// 	"[%s] search request message received from %s (budget:%d)",
+	// 	n.GetAddress(),
+	// 	pkt.Header.Source,
+	// 	searchRequestMessage.Budget,
+	// )
 
 	// forwards the search if the budgets permits
 	neighbors := n.GetNeighbors(pkt.Header.RelayedBy)
@@ -510,7 +518,7 @@ func (n *node) ExecSearchReplyMessage(msg types.Message, pkt transport.Packet) e
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] search reply message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] search reply message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	for _, fileInfo := range searchReplyMessage.Responses {
 		// update naming store
@@ -529,15 +537,17 @@ func (n *node) ExecSearchReplyMessage(msg types.Message, pkt transport.Packet) e
 }
 
 func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet) error {
+	// z.Logger.Info().Msgf("[%s] ExecArticleSummaryMessage in", n.GetAddress())
 	articleSummaryMessage, ok := msg.(*types.ArticleSummaryMessage)
 
 	if !ok {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] article summary message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] article summary message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	if articleSummaryMessage.UserID != "" && !articleSummaryMessage.Verify(n.pkMap[articleSummaryMessage.UserID]) {
+		// z.Logger.Info().Msgf("[%s] ExecArticleSummaryMessage out", n.GetAddress())
 		return nil
 	}
 
@@ -551,6 +561,7 @@ func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet
 
 	// TODO: download this file with probability p
 
+	// z.Logger.Info().Msgf("[%s] ExecArticleSummaryMessage out", n.GetAddress())
 	return nil
 }
 
@@ -561,7 +572,7 @@ func (n *node) ExecCommentMessage(msg types.Message, pkt transport.Packet) error
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] comment message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] comment message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	n.commentStore.Add(*commentMessage)
 	return nil
@@ -574,7 +585,7 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 		return xerrors.Errorf("wrong type: %T", msg)
 	}
 
-	z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
+	// z.Logger.Info().Msgf("[%s] vote message received from %s", n.GetAddress(), pkt.Header.Source)
 
 	pkix, err := x509.ParsePKIXPublicKey(voteMessage.PublicKey)
 	if err != nil {

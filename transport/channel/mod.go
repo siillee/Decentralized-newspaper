@@ -87,11 +87,13 @@ func (s *Socket) Close() error {
 
 // Send implements transport.Socket.
 func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) error {
+	// z.Logger.Info().Msgf("[%s] channel.Send in", s.GetAddress())
 	s.RLock()
 	to, ok := s.incomings[dest]
 
 	if !ok {
 		s.RUnlock()
+		// z.Logger.Info().Msgf("[%s] channel.Send out", s.GetAddress())
 		return xerrors.Errorf("%s is not listening", dest)
 	}
 	s.RUnlock()
@@ -100,15 +102,19 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 		timeout = math.MaxInt64
 	}
 
+	// z.Logger.Info().Msgf("[%s] channel.Send select pre", s.GetAddress())
 	select {
 	case to <- pkt.Copy():
 	case <-time.After(timeout):
+		// z.Logger.Info().Msgf("[%s] channel.Send out", s.GetAddress())
 		return transport.TimeoutError(timeout)
 	}
+	// z.Logger.Info().Msgf("[%s] channel.Send select after", s.GetAddress())
 
 	s.outs.add(pkt)
 	s.traffic.LogSent(pkt.Header.RelayedBy, dest, pkt)
 
+	// z.Logger.Info().Msgf("[%s] channel.Send out", s.GetAddress())
 	return nil
 }
 

@@ -1,12 +1,13 @@
 package impl
 
 import (
+	"time"
+
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"time"
 )
 
 func (n *node) SendTo(dest string, msg transport.Message) (transport.Packet, error) {
@@ -42,7 +43,7 @@ func (n *node) Unicast(dest string, msg transport.Message) error {
 		Msg:    &msg,
 	}
 	err := n.conf.Socket.Send(to, pkt, 0)
-	z.Logger.Info().Msgf("[%s] unicast message to %s via %s", n.GetAddress(), dest, to)
+	// z.Logger.Info().Msgf("[%s] unicast message to %s via %s", n.GetAddress(), dest, to)
 	if err != nil {
 		return xerrors.Errorf("failed to send packet to %s: %v", to, err)
 	}
@@ -71,11 +72,11 @@ func (n *node) Broadcast(msg transport.Message) error {
 	// Send rumor to a random neighbor
 	neighbor := n.GetRandomNeighbor("")
 	if neighbor == "" {
-		z.Logger.Debug().Msgf("[%s] unable to broadcast rumor (no neighbor found)", n.GetAddress())
+		// z.Logger.Debug().Msgf("[%s] unable to broadcast rumor (no neighbor found)", n.GetAddress())
 		return nil
 	}
 	pkt, err := n.SendTo(neighbor, rumorsTransportMessage)
-	z.Logger.Info().Msgf("[%s] broadcast rumor to %s", n.GetAddress(), neighbor)
+	// z.Logger.Info().Msgf("[%s] broadcast rumor to %s", n.GetAddress(), neighbor)
 	if err != nil {
 		z.Logger.Err(err).Msgf("[%s] failed to broadcast to %s", n.GetAddress(), neighbor)
 		return err
@@ -98,12 +99,12 @@ func (n *node) WaitForAck(pkt transport.Packet, from string, rumorsTransportMess
 	for {
 		select {
 		case <-n.ackChannels.Get(pkt.Header.PacketID):
-			z.Logger.Debug().Msgf("[%s] ack received, stop timeout", n.GetAddress())
+			// z.Logger.Debug().Msgf("[%s] ack received, stop timeout", n.GetAddress())
 			return
 		case <-time.After(n.conf.AckTimeout):
 			// Send rumor to another random neighbor
 			neighbor := n.GetRandomNeighbor(from)
-			z.Logger.Debug().Msgf("[%s] ack timeout, sending to another random neighbor: %s", n.GetAddress(), neighbor)
+			// z.Logger.Debug().Msgf("[%s] ack timeout (sent to %s), sending to another random neighbor: %s", n.GetAddress(), from, neighbor)
 
 			_, err := n.SendTo(neighbor, rumorsTransportMessage)
 			if err != nil {
@@ -140,7 +141,7 @@ func (n *node) GetAddress() string {
 // AddPeer implements peer.Service
 func (n *node) AddPeer(addr ...string) {
 	for _, entry := range addr {
-		z.Logger.Info().Msgf("[%s] add peer %s", n.GetAddress(), entry)
+		// z.Logger.Info().Msgf("[%s] add peer %s", n.GetAddress(), entry)
 		n.routingTable.AddEntry(entry, entry)
 	}
 }
@@ -156,7 +157,7 @@ func (n *node) GetRoutingTable() peer.RoutingTable {
 
 // SetRoutingEntry implements peer.Service
 func (n *node) SetRoutingEntry(origin, relayAddr string) {
-	z.Logger.Debug().Msgf("[%s] set routing entry : %s -> %s", n.GetAddress(), origin, relayAddr)
+	// z.Logger.Debug().Msgf("[%s] set routing entry : %s -> %s", n.GetAddress(), origin, relayAddr)
 	if !(origin == n.GetAddress() && relayAddr == "") {
 		n.routingTable.AddEntry(origin, relayAddr)
 	}

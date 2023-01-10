@@ -70,7 +70,9 @@ func (r *Registry) ProcessPacket(pkt transport.Packet) error {
 			close(wait)
 		}()
 
+		// z.Logger.Info().Msgf("[%s] LIVE ProcessPacket enter", pkt.Header.Destination)
 		err := h(msg, pkt)
+		// z.Logger.Info().Msgf("[%s] LIVE ProcessPacket exit", pkt.Header.Destination)
 		if err != nil {
 			wait <- err
 		}
