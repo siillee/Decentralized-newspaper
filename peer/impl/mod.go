@@ -1,8 +1,8 @@
 package impl
 
 import (
-	"crypto/ecdsa"
 	rd "crypto/rand"
+	"crypto/rsa"
 	"math/big"
 	"math/rand"
 	"sort"
@@ -34,10 +34,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	routingTable.AddEntry(peerAddress, peerAddress)
 
 	// mapping between peer address (or userID) and their public key
-	pkMap := make(map[string]ecdsa.PublicKey)
-	if conf.PrivateKey != nil {
-		pkMap[peerAddress] = conf.PrivateKey.PublicKey
-	}
+	pkMap := make(map[string]rsa.PublicKey)
+	// if conf.PrivateKey != nil {
+	// 	pkMap[peerAddress] = conf.PrivateKey.PublicKey
+	// }
 
 	catalog := make(peer.Catalog)
 
@@ -85,7 +85,7 @@ type node struct {
 	dhKeyStore               concurrent.DHKeyStore
 	catalog                  peer.Catalog
 	requestManager           request.Manager
-	pkMap                    map[string]ecdsa.PublicKey
+	pkMap                    map[string]rsa.PublicKey
 	directory                types.Directory
 	proxyCircuits            types.ConcurrentProxyCircuits
 	relayCircuits            types.ConcurrentRelayCircuits

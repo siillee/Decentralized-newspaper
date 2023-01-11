@@ -1,7 +1,7 @@
 package peer
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"math/big"
 	"time"
 
@@ -67,9 +67,11 @@ type Configuration struct {
 	Storage storage.Storage
 
 	// Contains public and private key
-	PrivateKey *ecdsa.PrivateKey
+	PrivateKey *rsa.PrivateKey
 
 	DH DHParameters
+
+	DirectoryNodes []string
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

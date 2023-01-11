@@ -1,10 +1,11 @@
 package peer
 
 import (
-	"crypto/ecdsa"
-	"go.dedis.ch/cs438/types"
+	"crypto/rsa"
 	"io"
 	"math/big"
+
+	"go.dedis.ch/cs438/types"
 )
 
 type User interface {
@@ -18,7 +19,7 @@ type User interface {
 
 	GetSummary(articleID string) types.ArticleSummaryMessage
 
-	AddPublicKey(pk ecdsa.PublicKey, userID string)
+	AddPublicKey(pk rsa.PublicKey, userID string)
 
 	EstablishKeyExchange(userID string) (big.Int, error)
 

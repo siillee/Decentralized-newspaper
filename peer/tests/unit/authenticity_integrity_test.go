@@ -3,31 +3,29 @@ package unit
 import (
 	"bytes"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
+	"testing"
+	"time"
+
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/transport/channel"
 	"go.dedis.ch/cs438/types"
-	"testing"
-	"time"
 )
 
 func Test_Authenticity_Integrity_Summary_Valid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
 	defer node1.Stop()
 
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2))
@@ -71,15 +69,13 @@ func Test_Authenticity_Integrity_Summary_Valid(t *testing.T) {
 func Test_Authenticity_Integrity_Summary_Invalid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
 	defer node1.Stop()
 
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2))
@@ -88,7 +84,7 @@ func Test_Authenticity_Integrity_Summary_Invalid(t *testing.T) {
 	node1.AddPublicKey(keys2.PublicKey, node2.GetAddr())
 	node2.AddPublicKey(keys1.PublicKey, node1.GetAddr())
 
-	keys3, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys3, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	sock, err := transp.CreateSocket("127.0.0.1:0")

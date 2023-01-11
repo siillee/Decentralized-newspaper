@@ -1,7 +1,7 @@
 package types
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"math/big"
 	"math/rand"
 	"sync"
@@ -12,7 +12,7 @@ import (
 // Information about a node in the network.
 type TorNode struct {
 	Ip string
-	Pk *ecdsa.PublicKey
+	Pk *rsa.PublicKey
 }
 
 /*
@@ -94,6 +94,13 @@ func contains(arr []string, str string) bool {
 	return false
 }
 
+/*
+This is the circuit which relay nodes have (the ones not initiating the requests).
+Each relay node has two relay circuits per big circuit (by big circuit, the full circuit with
+all nodes is meant), except the exit node, which has one, and then connects to the whole network
+on the other side. Each relay circuit connects two nodes on each side (e.g. A-B-C, B has a relay circuit
+both with A and C) in the big circuit.
+*/
 type RelayCircuit struct {
 	Id          string
 	FirstNode   TorNode
@@ -103,6 +110,10 @@ type RelayCircuit struct {
 	SharedKey   []byte // Key generated in the key exchange protocol.
 }
 
+/*
+This is the circuit which a proxy node has. The proxy node is the node which initiates requests.
+A node can be a part of multiple proxy and relay circuits simultaneously.
+*/
 type ProxyCircuit struct {
 	RelayCircuit
 	AllSharedKeys [][]byte // Keys generated with all nodes in the circuit, used for creating an onion.
@@ -147,16 +158,17 @@ func (cpc *ConcurrentProxyCircuits) Add(id string, circuit *ProxyCircuit) {
 	cpc.ProxyCircuits[id] = circuit
 }
 
+func (cpc *ConcurrentProxyCircuits) Delete(id string) {
+	cpc.Lock()
+	defer cpc.Unlock()
+
+	delete(cpc.ProxyCircuits, id)
+}
+
 func (cpc *ConcurrentProxyCircuits) Get(id string) *ProxyCircuit {
 	cpc.Lock()
 	defer cpc.Unlock()
 
-	// circuit, check := cpc.ProxyCircuits[id]
-	// if check {
-	// 	return circuit
-	// }
-
-	// return nil
 	return cpc.ProxyCircuits[id]
 }
 
@@ -178,6 +190,13 @@ func (kepc *KeyExchangeReplyChannels) Add(id string, msg KeyExchangeReplyMessage
 		kepc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
 	}
 	kepc.ChannelMap[id] <- msg
+}
+
+func (kepc *KeyExchangeReplyChannels) MakeChannel(id string) {
+	kepc.Lock()
+	defer kepc.Unlock()
+
+	kepc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
 }
 
 func (kepc *KeyExchangeReplyChannels) Get(id string) chan KeyExchangeReplyMessage {
@@ -202,6 +221,7 @@ type KeyExchangeReplyMessage struct {
 	Signature []byte
 }
 
+// Struct representing onion messages.
 type OnionMessage struct {
 	CircuitID string
 	Direction bool // Direction of the flow of the onion messages. True if forward, false if backwards.
@@ -209,6 +229,7 @@ type OnionMessage struct {
 	Payload   []byte
 }
 
+// Structs representing anonymous messages sent by nodes (users).
 type AnonymousArticleSummaryMessage struct {
 	CircuitID string
 	// ArticleSummaryMessage --- in form of byte array payload
@@ -234,7 +255,7 @@ type TorNodeInfoRequestMessage struct {
 
 type TorNodeInfoReplyMessage struct {
 	Ip string
-	Pk *ecdsa.PublicKey
+	Pk *rsa.PublicKey
 }
 
 //------------------------------Helper structs------------------------------
@@ -242,4 +263,9 @@ type TorNodeInfoReplyMessage struct {
 type ArticleInfo struct {
 	Title    string
 	Metahash string
+}
+
+type AnonymousArticle struct {
+	Summary ArticleSummaryMessage
+	Content string
 }

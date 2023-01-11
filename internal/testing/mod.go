@@ -2,7 +2,7 @@ package testing
 
 import (
 	"bytes"
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -142,8 +142,10 @@ type configTemplate struct {
 
 	dataRequestBackoff peer.Backoff
 
-	privateKey *ecdsa.PrivateKey
+	privateKey *rsa.PrivateKey
 	dhParams   peer.DHParameters
+
+	directoryNodes []string
 }
 
 func newConfigTemplate() configTemplate {
@@ -253,7 +255,7 @@ func WithStorage(storage storage.Storage) Option {
 }
 
 // WithPrivateKey sets a key pair (private key, public key)
-func WithPrivateKey(key *ecdsa.PrivateKey) Option {
+func WithPrivateKey(key *rsa.PrivateKey) Option {
 	return func(ct *configTemplate) {
 		ct.privateKey = key
 	}
@@ -267,6 +269,13 @@ func WithDHParams(p, q, g *big.Int) Option {
 			Q: q,
 			G: g,
 		}
+	}
+}
+
+// WithDirectoryNodes sets the known directory nodes
+func WithDirectoryNodes(nodes []string) Option {
+	return func(ct *configTemplate) {
+		ct.directoryNodes = nodes
 	}
 }
 
@@ -295,6 +304,7 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.BackoffDataRequest = template.dataRequestBackoff
 	config.PrivateKey = template.privateKey
 	config.DH = template.dhParams
+	config.DirectoryNodes = template.directoryNodes
 
 	node := f(config)
 

@@ -1,16 +1,17 @@
 package impl
 
 import (
-	"crypto/ecdsa"
 	rd "crypto/rand"
-	"github.com/rs/xid"
-	"go.dedis.ch/cs438/types"
-	"golang.org/x/xerrors"
+	"crypto/rsa"
 	"io"
 	"math"
 	"math/big"
 	"regexp"
 	"time"
+
+	"github.com/rs/xid"
+	"go.dedis.ch/cs438/types"
+	"golang.org/x/xerrors"
 )
 
 func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
@@ -120,7 +121,7 @@ func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 	return n.summaryStore.Get(articleID)
 }
 
-func (n *node) AddPublicKey(pk ecdsa.PublicKey, userID string) {
+func (n *node) AddPublicKey(pk rsa.PublicKey, userID string) {
 	n.pkMap[userID] = pk
 }
 

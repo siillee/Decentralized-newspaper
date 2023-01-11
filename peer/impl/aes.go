@@ -11,7 +11,7 @@ import (
 
 func Encrypt(key []byte, plaintext []byte) ([]byte, error) {
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(key[:32])
 	if err != nil {
 		return nil, xerrors.Errorf("error while generating new AES cipher for encryption: %v", err)
 	}
@@ -31,7 +31,7 @@ func Encrypt(key []byte, plaintext []byte) ([]byte, error) {
 
 func Decrypt(key []byte, ciphertext []byte) ([]byte, error) {
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(key[:32])
 	if err != nil {
 		return nil, xerrors.Errorf("error while generating new AES cipher for decryption: %v", err)
 	}

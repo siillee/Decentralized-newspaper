@@ -2,13 +2,13 @@ package impl
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/rs/xid"
+	"go.dedis.ch/cs438/customCrypto"
+	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
@@ -21,11 +21,8 @@ Their addresses are hard-coded in every node.
 */
 func (n *node) GetDirectoryServerKeys() {
 
-	directoryNodes := []string{"127.0.0.1:2000", "127.0.0.1:2001", "127.0.0.1:2002", "127.0.0.1:2003", "127.0.0.1:2004",
-		"127.0.0.1:2005", "127.0.0.1:2006", "127.0.0.1:2007", "127.0.0.1:2008", "127.0.0.1:2009"}
-
 	go func() {
-		for _, ip := range directoryNodes {
+		for _, ip := range n.conf.DirectoryNodes {
 
 			n.AddPeer(ip)
 
@@ -37,17 +34,14 @@ func (n *node) GetDirectoryServerKeys() {
 			torNodeInfoRequestMsg := types.TorNodeInfoRequestMessage{Ip: n.conf.Socket.GetAddress()}
 			transportMsg, err := n.conf.MessageRegistry.MarshalMessage(torNodeInfoRequestMsg)
 			if err != nil {
-				// n.log.Err(xerrors.Errorf("error while marshaling tor node info request message: %v", err))
 				continue
 			}
 
 			// Loop until you see the node in the directory. The loop is needed because there could be
 			// messages lost when starting up the first "directory nodes".
 			for !n.directory.Contains(ip) {
-				fmt.Printf("%s : Sending info request to %s \n", n.conf.Socket.GetAddress(), ip)
 				_, err = n.SendTo(ip, transportMsg)
 				if err != nil {
-					// n.log.Err(xerrors.Errorf("error while sending tor node info request message: %v", err))
 					continue
 				}
 				time.Sleep(time.Millisecond * 50)
@@ -63,6 +57,9 @@ func (n *node) GetDirectory() map[string]types.TorNode {
 
 // CreateRandomCircuit implements peer.Tor
 func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
+
+	z.Logger.Info().Msgf("[%s] Creating new random circuit", n.GetAddress())
+	startTime := time.Now()
 
 	torNodes, err := n.directory.GetRandomNodes(3, n.conf.Socket.GetAddress())
 	if err != nil {
@@ -80,6 +77,7 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 		},
 		AllSharedKeys: nil,
 	}
+	n.proxyCircuits.Add(circuit.Id, &circuit)
 
 	for i, nodeIp := range torNodes {
 
@@ -106,15 +104,18 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 
 		_, err = n.SendTo(circuit.SecondNode.Ip, transportMsg)
 		if err != nil {
-			return nil, xerrors.Errorf("error while sending onion message via direct unicast: %v", err)
+			return nil, xerrors.Errorf("error while sending onion message: %v", err)
 		}
 
+		n.keyExchangeReplyChannels.MakeChannel(circuit.Id)
 		select {
 		case keyExchangeReplyMsg := <-n.keyExchangeReplyChannels.Get(circuit.Id):
-
+			// TODO: Verify reply
 			messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
 			hashed := sha256(messageBytes)
-			if !ecdsa.VerifyASN1(n.directory.Get(nodeIp).Pk, hashed, keyExchangeReplyMsg.Signature) {
+
+			if !customCrypto.VerifyRSA(n.directory.Get(nodeIp).Pk, hashed, keyExchangeReplyMsg.Signature) {
+				n.proxyCircuits.Delete(keyExchangeReplyMsg.CircuitID)
 				return nil, xerrors.Errorf("verification of key exchange reply message failed")
 			}
 
@@ -129,6 +130,7 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 	}
 
 	n.proxyCircuits.Add(circuit.Id, &circuit)
+	z.Logger.Info().Msgf("[%s] Created new random circuit with nodes: %s in %f seconds", n.GetAddress(), torNodes, time.Since(startTime).Seconds())
 
 	return &circuit, nil
 }
@@ -174,9 +176,22 @@ func PeelFullOnion(onionMsg types.OnionMessage, circuit types.ProxyCircuit) ([]b
 	return onionMsg.Payload, nil
 }
 
-func CreateRelayOnion(onionMsg types.OnionMessage, circuit types.RelayCircuit) ([]byte, error) {
+// Used only during the key exchange protocol.
+func CreateRelayOnion(keyMsg types.KeyExchangeReplyMessage, circuit types.RelayCircuit) (*types.OnionMessage, error) {
 
 	var err error
+	marshaledMsg, err := json.Marshal(keyMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	onionMsg := types.OnionMessage{
+		CircuitID: circuit.Id,
+		Direction: false,
+		Type:      keyMsg.Name(),
+		Payload:   marshaledMsg,
+	}
+
 	if circuit.SharedKey != nil {
 		onionMsg.Payload, err = Encrypt(circuit.SharedKey, onionMsg.Payload)
 		if err != nil {
@@ -184,20 +199,7 @@ func CreateRelayOnion(onionMsg types.OnionMessage, circuit types.RelayCircuit) (
 		}
 	}
 
-	return onionMsg.Payload, nil
-}
-
-func PeelRelayOnion(onionMsg types.OnionMessage, circuit types.RelayCircuit) ([]byte, error) {
-
-	var err error
-	if circuit.SharedKey != nil {
-		onionMsg.Payload, err = Decrypt(circuit.SharedKey, onionMsg.Payload)
-		if err != nil {
-			return nil, xerrors.Errorf("error while decrypting onion message: %v", err)
-		}
-	}
-
-	return onionMsg.Payload, nil
+	return &onionMsg, nil
 }
 
 /*
@@ -269,12 +271,17 @@ func RelayDecryption(circuit types.RelayCircuit, payload []byte) ([]byte, error)
 	return payload, nil
 }
 
-// SendAnonymousArticleSummaryMessage implements peer.Tor
-func (n *node) SendAnonymousArticleSummaryMessage(article types.ArticleSummaryMessage) error {
+// AnonymousPublishArticle implements peer.Tor
+func (n *node) AnonymousPublishArticle(summary types.ArticleSummaryMessage, content string) error {
 
 	circuit, err := n.CreateRandomCircuit()
 	if err != nil {
 		return err
+	}
+
+	article := types.AnonymousArticle{
+		Summary: summary,
+		Content: content,
 	}
 
 	payload, err := json.Marshal(article)
@@ -302,8 +309,8 @@ func (n *node) SendAnonymousArticleSummaryMessage(article types.ArticleSummaryMe
 	return err
 }
 
-// SendAnonymousDownloadRequestMessage implements peer.Tor
-func (n *node) SendAnonymousDownloadRequestMessage(title, metahash string) error {
+// AnonymousDownloadArticle implements peer.Tor
+func (n *node) AnonymousDownloadArticle(title, metahash string) error {
 
 	circuit, err := n.CreateRandomCircuit()
 	if err != nil {
@@ -346,13 +353,14 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 	if !ok {
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
-
+	z.Logger.Info().Msgf("[%s] handling Onion message from %s", n.GetAddress(), packet.Header.Source)
 	var err error
 	proxyCircuit := n.proxyCircuits.Get(onionMsg.CircuitID)
 	relayCircuit := n.relayCircuits.Get(onionMsg.CircuitID)
 
 	if proxyCircuit != nil {
 
+		z.Logger.Info().Msgf("[%s] I am the proxy for the Onion message", n.GetAddress())
 		onionMsg.Payload, err = PeelFullOnion(*onionMsg, *proxyCircuit)
 		if err != nil {
 			return xerrors.Errorf("error while peeling whole onion: %v", err)
@@ -383,6 +391,7 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 
 	} else if relayCircuit != nil {
 
+		z.Logger.Info().Msgf("[%s] I am the relay for the Onion message", n.GetAddress())
 		var nextHop string
 		if onionMsg.Direction { // If direction is forward.
 			onionMsg.Payload, err = Decrypt(relayCircuit.SharedKey, onionMsg.Payload)
@@ -437,10 +446,11 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 		}
 		_, err = n.SendTo(nextHop, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while sending onion via unicast: %v", err)
+			return xerrors.Errorf("error while sending onion: %v", err)
 		}
 
 	} else {
+		z.Logger.Info().Msgf("[%s] Received Key Exchange Request Message from the onion", n.GetAddress())
 		if onionMsg.Type == types.KeyExchangeRequestMessage.Name(types.KeyExchangeRequestMessage{}) {
 			newPacket := transport.Packet{
 				Header: packet.Header,
@@ -449,7 +459,6 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 					Payload: onionMsg.Payload,
 				},
 			}
-
 			return n.conf.MessageRegistry.ProcessPacket(newPacket)
 		}
 
@@ -466,6 +475,8 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
 
+	z.Logger.Info().Msgf("[%s] handling Key Exchange Request message", n.GetAddress())
+
 	var err error
 	relayCircuit := n.relayCircuits.Get(keyExchangeReqMsg.CircuitID)
 
@@ -479,6 +490,9 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			NextCircuit: nil,
 			SharedKey:   nil,
 		}
+		if newCircuit.FirstNode.Ip == "" {
+			newCircuit.FirstNode = types.TorNode{Ip: packet.Header.Source}
+		}
 
 		myPrivateKey, myPublicKey := n.DHGenerateKeys()
 
@@ -488,8 +502,8 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 		}
 		messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
 		hashed := sha256(messageBytes)
-		//TODO: Sign using rsa --- ecdsa is for now
-		keyExchangeReplyMsg.Signature, err = ecdsa.SignASN1(rand.Reader, n.conf.PrivateKey, hashed)
+
+		keyExchangeReplyMsg.Signature, err = customCrypto.SignRSA(n.conf.PrivateKey, hashed)
 		if err != nil {
 			return err
 		}
@@ -498,9 +512,13 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 		if err != nil {
 			return err
 		}
-		newCircuit.SharedKey = sharedKey.Bytes()
 
-		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(keyExchangeReplyMsg)
+		onionMsg, err := CreateRelayOnion(keyExchangeReplyMsg, newCircuit)
+		if err != nil {
+			return err
+		}
+
+		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(onionMsg)
 		if err != nil {
 			return xerrors.Errorf("error while marshaling key exchange reply message")
 		}
@@ -510,6 +528,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			return err
 		}
 
+		newCircuit.SharedKey = sharedKey.Bytes()
 		n.relayCircuits.Add(newCircuit.Id, &newCircuit)
 
 	} else if relayCircuit.NextCircuit == nil && keyExchangeReqMsg.Extend != n.conf.Socket.GetAddress() {
@@ -533,7 +552,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 
 		_, err = n.SendTo(keyExchangeReqMsg.Extend, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while forwarding key exchange request message via Unicast: %v", err)
+			return xerrors.Errorf("error while forwarding key exchange request message: %v", err)
 		}
 	} else if relayCircuit.NextCircuit != nil && keyExchangeReqMsg.Extend != n.conf.Socket.GetAddress() {
 		keyExchangeReqMsg.CircuitID = relayCircuit.NextCircuit.Id
@@ -544,7 +563,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 
 		_, err = n.SendTo(keyExchangeReqMsg.Extend, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while forwarding key exchange request message via Unicast: %v", err)
+			return xerrors.Errorf("error while forwarding key exchange request message: %v", err)
 		}
 	} else {
 		return xerrors.Errorf("failed to extend circuit")
@@ -560,10 +579,13 @@ func (n *node) ExecKeyExchangeReplyMessage(msg types.Message, packet transport.P
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
 
+	z.Logger.Info().Msgf("[%s] handling Key Exchange Reply message", n.GetAddress())
+
 	proxyCircuit := n.proxyCircuits.Get(keyExchangeReplyMsg.CircuitID)
 	relayCircuit := n.relayCircuits.Get(keyExchangeReplyMsg.CircuitID)
 
 	if proxyCircuit != nil {
+		z.Logger.Info().Msgf("[%s] The Key Exchange Reply message is for me", n.GetAddress())
 		n.keyExchangeReplyChannels.Get(keyExchangeReplyMsg.CircuitID) <- *keyExchangeReplyMsg
 	} else if relayCircuit != nil {
 		prevCircuit := relayCircuit.PrevCircuit
@@ -576,10 +598,9 @@ func (n *node) ExecKeyExchangeReplyMessage(msg types.Message, packet transport.P
 		if err != nil {
 			return xerrors.Errorf("error while marshaling key exchange reply message when forwarding it: %v", err)
 		}
-
-		_, err = n.SendTo(relayCircuit.FirstNode.Ip, transportMsg)
+		_, err = n.SendTo(prevCircuit.FirstNode.Ip, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while sending key exchange reply message via Unicast: %v", err)
+			return xerrors.Errorf("error while sending key exchange reply message: %v", err)
 		}
 	} else {
 		return xerrors.Errorf("circuit ID of key exchange reply message unknwon")
@@ -595,13 +616,16 @@ func (n *node) ExecTorNodeInfoRequestMessage(msg types.Message, packet transport
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
 
+	z.Logger.Info().Msgf("[%s] handling TorNode Info Request message", n.GetAddress())
+
+	n.AddPeer(packet.Header.Source)
+
 	torNodeInfoReplyMsg := types.TorNodeInfoReplyMessage{
 		Ip: n.conf.Socket.GetAddress(),
 		Pk: &n.conf.PrivateKey.PublicKey,
 	}
 	transportMsg, err := n.conf.MessageRegistry.MarshalMessage(torNodeInfoReplyMsg)
 	if err != nil {
-		// n.log.Err(xerrors.Errorf("error while marshaling tor node info reply message: %v", err))
 		return err
 	}
 	_, err = n.SendTo(packet.Header.Source, transportMsg)
@@ -616,10 +640,9 @@ func (n *node) ExecTorNodeInfoReplyMessage(msg types.Message, packet transport.P
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
 
-	check := n.directory.Add(torNodeInfoReplyMsg.Ip, types.TorNode{Ip: torNodeInfoReplyMsg.Ip, Pk: torNodeInfoReplyMsg.Pk})
-	if !check {
-		return xerrors.Errorf("node already in directory")
-	}
+	z.Logger.Info().Msgf("[%s] handling TorNode Info Reply message", n.GetAddress())
+
+	n.directory.Add(torNodeInfoReplyMsg.Ip, types.TorNode{Ip: torNodeInfoReplyMsg.Ip, Pk: torNodeInfoReplyMsg.Pk})
 
 	return nil
 }
@@ -630,6 +653,8 @@ func (n *node) ExecAnonymousArticleSummaryMessage(msg types.Message, packet tran
 	if !ok {
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
+
+	z.Logger.Info().Msgf("[%s] handling Anonymous Article Summary message", n.GetAddress())
 
 	relayCircuit := n.relayCircuits.Get(anonymousArticleMsg.CircuitID)
 	if relayCircuit == nil {
@@ -653,13 +678,30 @@ func (n *node) ExecAnonymousArticleSummaryMessage(msg types.Message, packet tran
 
 		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNode.Ip, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while sending anonymous article message via unicast: %v", err)
+			return xerrors.Errorf("error while sending anonymous article message: %v", err)
 		}
 	} else { // Case in which this node is an exit node.
 
+		var article types.AnonymousArticle
+		err = json.Unmarshal(payload, &article)
+		if err != nil {
+			return err
+		}
+
+		metahash, err := n.Upload(bytes.NewReader([]byte(article.Content)))
+		if err != nil {
+			return err
+		}
+		n.Tag(article.Summary.Title, metahash)
+
+		summary, err := json.Marshal(article.Summary)
+		if err != nil {
+			return err
+		}
+
 		transportMsg := transport.Message{
 			Type:    types.ArticleSummaryMessage{}.Name(),
-			Payload: payload,
+			Payload: summary,
 		}
 
 		n.Broadcast(transportMsg)
@@ -674,6 +716,8 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 	if !ok {
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
+
+	z.Logger.Info().Msgf("[%s] handling Anonymous Download Request message", n.GetAddress())
 
 	relayCircuit := n.relayCircuits.Get(anonymousDownloadReqMsg.CircuitID)
 	if relayCircuit == nil {
@@ -697,7 +741,7 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 
 		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNode.Ip, transportMsg)
 		if err != nil {
-			return xerrors.Errorf("error while sending anonymous download message via unicast: %v", err)
+			return xerrors.Errorf("error while sending anonymous download message: %v", err)
 		}
 	} else { // Case in which this node is an exit node.
 
@@ -706,6 +750,8 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 		if err != nil {
 			return xerrors.Errorf("error while unmarshaling article info from anonymous download message: %v", err)
 		}
+
+		fmt.Printf("%s : Article Info: Title - %s ; Metahash - %s \n", n.GetAddress(), articleInfo.Title, articleInfo.Metahash)
 
 		file, err := n.DownloadArticle(articleInfo.Title, articleInfo.Metahash)
 		if err != nil {
@@ -742,6 +788,8 @@ func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet trans
 	if !ok {
 		return xerrors.Errorf("wrong message type: %T", msg)
 	}
+
+	z.Logger.Info().Msgf("[%s] handling Anonymous Download Reply message", n.GetAddress())
 
 	proxyCircuit := n.proxyCircuits.Get(anonymousDownloadReplyMsg.CircuitID)
 	relayCircuit := n.relayCircuits.Get(anonymousDownloadReplyMsg.CircuitID)
