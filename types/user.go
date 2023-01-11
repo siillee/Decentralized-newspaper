@@ -11,6 +11,10 @@ import (
 	"go.dedis.ch/cs438/customCrypto"
 )
 
+const (
+	TimeFormat = "2006-01-02 15:04:05"
+)
+
 // -----------------------------------------------------------------------------
 // ArticleSummaryMessage
 
@@ -31,6 +35,7 @@ func (a ArticleSummaryMessage) String() string {
 	fmt.Fprintf(out, "Title: \t %s \n", a.Title)
 	fmt.Fprintf(out, "UserID: \t %s \n", a.UserID)
 	fmt.Fprintf(out, "Signature: %x \n", a.Signature)
+	fmt.Fprintf(out, "Timestamp: \t %s \n", a.Timestamp.Format(TimeFormat))
 
 	return out.String()
 }
@@ -47,6 +52,7 @@ func (a ArticleSummaryMessage) Hash() []byte {
 	h.Write([]byte(a.Title))
 	//h.Write([]byte(a.ShortDescription))
 	h.Write([]byte(a.Metahash))
+	h.Write([]byte(a.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 
@@ -75,7 +81,7 @@ func (c CommentMessage) Name() string {
 func (c CommentMessage) String() string {
 	out := new(strings.Builder)
 
-	fmt.Fprintf(out, "%s - [%s] :  %s \n", c.ArticleID, c.UserID, c.Content)
+	fmt.Fprintf(out, "%s - [%s] @ %s :  %s \n", c.ArticleID, c.UserID, c.Timestamp.Format(TimeFormat), c.Content)
 
 	return out.String()
 }
@@ -90,6 +96,7 @@ func (c CommentMessage) Hash() []byte {
 	h.Write([]byte(c.ArticleID))
 	h.Write([]byte(c.UserID))
 	h.Write([]byte(c.Content))
+	h.Write([]byte(c.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 
@@ -118,7 +125,7 @@ func (v VoteMessage) Name() string {
 func (v VoteMessage) String() string {
 	out := new(strings.Builder)
 
-	fmt.Fprintf(out, "(%s : %s) \n", v.ArticleID, v.UserID)
+	fmt.Fprintf(out, "(%s : %s) @ %s \n", v.ArticleID, v.UserID, v.Timestamp.Format(TimeFormat))
 
 	return out.String()
 }
@@ -132,6 +139,7 @@ func (v VoteMessage) Hash() []byte {
 	h := crypto.SHA256.New()
 	h.Write([]byte(v.ArticleID))
 	h.Write([]byte(v.UserID))
+	h.Write([]byte(v.Timestamp.Format(TimeFormat)))
 	return h.Sum(nil)
 }
 

@@ -32,7 +32,8 @@ func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 		ArticleID: articleID,
 		Title:     title,
 		//ShortDescription: shortDescription,
-		Metahash: metaHash,
+		Metahash:  metaHash,
+		Timestamp: time.Now(),
 	}
 
 	isUsingTor := false //add signature only if not anonymous and if it has a privateKey
@@ -93,6 +94,7 @@ func (n *node) Comment(comment, articleID string) error {
 		ArticleID: articleID,
 		UserID:    n.GetAddress(),
 		Content:   comment,
+		Timestamp: time.Now(),
 	}
 
 	commentTransportMessage, err := types.ToTransport(commentMessage)
@@ -104,9 +106,10 @@ func (n *node) Comment(comment, articleID string) error {
 }
 
 func (n *node) Vote(articleID string) error {
-	voteMessage := types.CommentMessage{
+	voteMessage := types.VoteMessage{
 		ArticleID: articleID,
 		UserID:    n.GetAddress(),
+		Timestamp: time.Now(),
 	}
 
 	voteTransportMessage, err := types.ToTransport(voteMessage)
