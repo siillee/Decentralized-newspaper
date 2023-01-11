@@ -21,7 +21,11 @@ Their addresses are hard-coded in every node.
 */
 func (n *node) GetDirectoryServerKeys() {
 
+	z.Logger.Info().Msgf("[%s] Getting info from directory nodes", n.GetAddress())
+	startTime := time.Now()
+
 	go func() {
+		defer z.Logger.Info().Msgf("[%s] Finished getting info from directory nodes in %f seconds", n.GetAddress(), time.Since(startTime).Seconds())
 		for _, ip := range n.conf.DirectoryNodes {
 
 			n.AddPeer(ip)
@@ -48,6 +52,7 @@ func (n *node) GetDirectoryServerKeys() {
 			}
 		}
 	}()
+
 }
 
 // GetDirectory implements peer.Tor
@@ -111,8 +116,7 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 		select {
 		case keyExchangeReplyMsg := <-n.keyExchangeReplyChannels.Get(circuit.Id):
 			// TODO: Verify reply
-			messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
-			hashed := sha256(messageBytes)
+			hashed := sha256(keyExchangeReplyMsg.PublicKey.Bytes())
 
 			if !customCrypto.VerifyRSA(n.directory.Get(nodeIp).Pk, hashed, keyExchangeReplyMsg.Signature) {
 				n.proxyCircuits.Delete(keyExchangeReplyMsg.CircuitID)
@@ -500,8 +504,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			CircuitID: keyExchangeReqMsg.CircuitID,
 			PublicKey: myPublicKey,
 		}
-		messageBytes := append([]byte(keyExchangeReplyMsg.CircuitID), keyExchangeReplyMsg.PublicKey.Bytes()...)
-		hashed := sha256(messageBytes)
+		hashed := sha256(keyExchangeReplyMsg.PublicKey.Bytes())
 
 		keyExchangeReplyMsg.Signature, err = customCrypto.SignRSA(n.conf.PrivateKey, hashed)
 		if err != nil {

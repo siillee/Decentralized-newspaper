@@ -27,10 +27,11 @@ func Test_Tor_Directory_Fill(t *testing.T) {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDirectoryNodes(getDirectoryNodes()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node1.Stop()
 
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 	dir := node1.GetDirectory()
 	require.Len(t, dir, 10)
 }
@@ -44,9 +45,10 @@ func Test_Tor_Circuit_Create(t *testing.T) {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node1.Stop()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
 	circuit, err := node1.CreateRandomCircuit()
 	require.NoError(t, err)
@@ -62,11 +64,13 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()))
+	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node2.Stop()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
 	title := "LoremIpsum"
 	content := " Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam varius maximus tellus, vel congue nunc" +
@@ -123,13 +127,15 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()))
+	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
+		z.WithPrivateKey(generateRSAKey()))
 	defer node2.Stop()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 2)
 
-	title := "My article"
+	title := "LoremIpsum"
 	content := " Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam varius maximus tellus, vel congue nunc" +
 		" efficitur a. Duis vel sagittis lacus, a vulputate massa. Maecenas molestie tempor felis sit amet sodales. " +
 		"Pellentesque porttitor convallis neque, iaculis maximus quam scelerisque blandit. Maecenas euismod nibh mi, " +
@@ -145,9 +151,14 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 		"tincidunt dui at, iaculis nisl. Aliquam convallis finibus ipsum. Quisque id massa vestibulum, congue velit eu," +
 		" viverra orci. Vivamus metus metus, dictum non porta posuere, commodo sit amet arcu. "
 
+	mh := "2da39247e2a131dd97fb311e0c477cde445e3d3269599fdd119ff2c1ae1199a6"
+
 	data := bytes.NewBuffer([]byte(content))
 
 	metahash, err := node2.Upload(data)
+	require.NoError(t, err)
+	require.Equal(t, mh, metahash)
+
 	node2.GetStorage().GetNamingStore().Set(title, []byte(metahash))
 	require.Equal(t, 1, node2.GetStorage().GetNamingStore().Len())
 
@@ -162,7 +173,7 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 	// in node1's circuit.
 	for _, dirNode := range directoryServers {
 		if dirNode.GetStorage().GetDataBlobStore().Len() != 0 {
-			require.Equal(t, 1, dirNode.GetStorage().GetDataBlobStore().Len())
+			require.Equal(t, metahash, string(dirNode.GetStorage().GetNamingStore().Get(title)))
 			break
 		}
 	}
