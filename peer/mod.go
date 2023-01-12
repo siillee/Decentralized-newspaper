@@ -8,6 +8,7 @@ import (
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
+	"go.dedis.ch/cs438/types"
 )
 
 // Peer defines the interface of a peer in the Peerster system. It embeds all
@@ -71,7 +72,11 @@ type Configuration struct {
 
 	DH DHParameters
 
+	// Contains ip addresses of directory nodes.
 	DirectoryNodes []string
+
+	// Contains a mapping of ip address to public key of the directory nodes.
+	Directory types.Directory
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

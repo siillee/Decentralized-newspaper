@@ -1,13 +1,17 @@
 package peer
 
-import "go.dedis.ch/cs438/types"
+import (
+	"crypto/rsa"
+
+	"go.dedis.ch/cs438/types"
+)
 
 type Tor interface {
 
 	/*
 		Returns the directory of a node.
 	*/
-	GetDirectory() map[string]types.TorNode
+	GetDirectory() map[string]*rsa.PublicKey
 
 	/*
 		Creates a new, random circuit in the network, enabling a node to send messages anonymously.

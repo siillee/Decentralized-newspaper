@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -17,60 +18,75 @@ import (
 	"go.dedis.ch/cs438/types"
 )
 
-// Tests the connection of a new node to the directory servers.
-func Test_Tor_Directory_Fill(t *testing.T) {
+func Test_Tor_Circuit_Create_Single(t *testing.T) {
 
 	udp := udp.NewUDP()
+	privateKeys := generateRSAKeys(10)
+	dir := getDirectory(privateKeys)
 
-	directoryServers := startDirectoryNodes(udp, t)
+	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
 	for _, server := range directoryServers {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node1.Stop()
 
-	time.Sleep(time.Second * 2)
-	dir := node1.GetDirectory()
-	require.Len(t, dir, 10)
-}
-
-func Test_Tor_Circuit_Create(t *testing.T) {
-
-	udp := udp.NewUDP()
-
-	directoryServers := startDirectoryNodes(udp, t)
 	for _, server := range directoryServers {
-		defer server.Stop()
+		server.AddPeer(node1.GetAddr())
 	}
-
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	defer node1.Stop()
-	time.Sleep(time.Second * 2)
 
 	circuit, err := node1.CreateRandomCircuit()
 	require.NoError(t, err)
 	require.Len(t, circuit.AllSharedKeys, 3)
 }
 
-func Test_Tor_Anonymous_Broadcast(t *testing.T) {
+func Test_Tor_Circuit_Create_Multiple(t *testing.T) {
 
 	udp := udp.NewUDP()
+	privateKeys := generateRSAKeys(10)
+	dir := getDirectory(privateKeys)
 
-	directoryServers := startDirectoryNodes(udp, t)
+	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
 	for _, server := range directoryServers {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	testNodes := startNodes(udp, 100, false, dir, privateKeys, t)
+	for _, node := range testNodes {
+		defer node.Stop()
+	}
+
+	for _, node := range testNodes {
+		createCicruit(node, t)
+	}
+
+	time.Sleep(time.Second * 5)
+}
+
+func Test_Tor_Anonymous_Broadcast(t *testing.T) {
+
+	udp := udp.NewUDP()
+	privateKeys := generateRSAKeys(10)
+	dir := getDirectory(privateKeys)
+
+	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, server := range directoryServers {
+		defer server.Stop()
+	}
+
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node2.Stop()
 	time.Sleep(time.Second * 2)
+
+	for _, server := range directoryServers {
+		server.AddPeer(node1.GetAddr(), node2.GetAddr())
+	}
 
 	title := "LoremIpsum"
 	content := " Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam varius maximus tellus, vel congue nunc" +
@@ -121,19 +137,24 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 func Test_Tor_Anonymous_Download(t *testing.T) {
 
 	udp := udp.NewUDP()
+	privateKeys := generateRSAKeys(10)
+	dir := getDirectory(privateKeys)
 
-	directoryServers := startDirectoryNodes(udp, t)
+	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
 	for _, server := range directoryServers {
 		defer server.Stop()
 	}
 
-	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node2.Stop()
-	time.Sleep(time.Second * 2)
+
+	for _, server := range directoryServers {
+		server.AddPeer(node1.GetAddr(), node2.GetAddr())
+	}
 
 	title := "LoremIpsum"
 	content := " Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam varius maximus tellus, vel congue nunc" +
@@ -177,37 +198,58 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 			break
 		}
 	}
-
 }
 
 //----------------------------------Helper functions---------------------------------------------
 
-func startDirectoryNodes(udp transport.Transport, t *testing.T) []z.TestNode {
+func startNodes(udp transport.Transport, num int, directory bool, dir []types.TorNode, keys []*rsa.PrivateKey, t *testing.T) []z.TestNode {
 
-	directoryNode1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2000", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2001", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode3 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2002", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode4 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2003", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode5 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2004", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode6 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2005", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode7 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2006", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode8 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2007", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode9 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2008", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
-	directoryNode10 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:2009", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes()),
-		z.WithPrivateKey(generateRSAKey()))
+	result := make([]z.TestNode, 0)
+	if directory {
+		address := ""
+		for i := 0; i < num; i++ {
+			if i < 10 {
+				address = "127.0.0.1:200" + fmt.Sprint(i)
+			} else {
+				address = "127.0.0.1:20" + fmt.Sprint(i)
+			}
+			result = append(result, z.NewTestNode(t, peerFac, udp, address, z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(num)),
+				z.WithPrivateKey(keys[i]), z.WithDirectory(dir)))
+		}
+	} else {
+		address := "127.0.0.1:0"
+		for i := 0; i < num; i++ {
+			result = append(result, z.NewTestNode(t, peerFac, udp, address, z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+				z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir)))
+		}
+	}
 
-	return []z.TestNode{directoryNode1, directoryNode2, directoryNode3, directoryNode4, directoryNode5,
-		directoryNode6, directoryNode7, directoryNode8, directoryNode9, directoryNode10}
+	return result
+}
 
+func generateRSAKeys(num int) []*rsa.PrivateKey {
+
+	result := make([]*rsa.PrivateKey, 0)
+	for i := 0; i < num; i++ {
+		result = append(result, generateRSAKey())
+	}
+
+	return result
+}
+
+func getDirectory(keys []*rsa.PrivateKey) []types.TorNode {
+
+	result := make([]types.TorNode, 0)
+
+	for i := 0; i < len(keys); i++ {
+		if i < 10 {
+			result = append(result, types.TorNode{Ip: "127.0.0.1:200" + fmt.Sprint(i), Pk: &keys[i].PublicKey})
+		} else {
+			result = append(result, types.TorNode{Ip: "127.0.0.1:20" + fmt.Sprint(i), Pk: &keys[i].PublicKey})
+		}
+	}
+
+	return result
 }
 
 func generateDHParameters() (*big.Int, *big.Int, *big.Int) {
@@ -221,13 +263,31 @@ func generateDHParameters() (*big.Int, *big.Int, *big.Int) {
 	return p, q, g
 }
 
-func getDirectoryNodes() []string {
-	return []string{"127.0.0.1:2000", "127.0.0.1:2001", "127.0.0.1:2002", "127.0.0.1:2003", "127.0.0.1:2004",
-		"127.0.0.1:2005", "127.0.0.1:2006", "127.0.0.1:2007", "127.0.0.1:2008", "127.0.0.1:2009"}
+func getDirectoryNodes(num int) []string {
+
+	result := make([]string, 0)
+
+	for i := 0; i < num; i++ {
+		if i < 10 {
+			result = append(result, "127.0.0.1:200"+fmt.Sprint(i))
+		} else {
+			result = append(result, "127.0.0.1:20"+fmt.Sprint(i))
+		}
+	}
+
+	return result
 }
 
 func generateRSAKey() *rsa.PrivateKey {
 
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	return key
+}
+
+func createCicruit(node z.TestNode, t *testing.T) {
+	go func() {
+		circuit, err := node.CreateRandomCircuit()
+		require.NoError(t, err)
+		require.Len(t, circuit.AllSharedKeys, 3)
+	}()
 }

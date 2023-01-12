@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"math/rand"
 
@@ -146,6 +147,8 @@ type configTemplate struct {
 	dhParams   peer.DHParameters
 
 	directoryNodes []string
+
+	dir types.Directory
 }
 
 func newConfigTemplate() configTemplate {
@@ -279,6 +282,16 @@ func WithDirectoryNodes(nodes []string) Option {
 	}
 }
 
+// WithDirectory sets the directory of tor nodes
+func WithDirectory(torNodes []types.TorNode) Option {
+	return func(ct *configTemplate) {
+		ct.dir = types.Directory{Dir: make(map[string]*rsa.PublicKey), Mutex: &sync.Mutex{}}
+		for _, torNode := range torNodes {
+			ct.dir.Add(torNode.Ip, torNode.Pk)
+		}
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -305,6 +318,7 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.PrivateKey = template.privateKey
 	config.DH = template.dhParams
 	config.DirectoryNodes = template.directoryNodes
+	config.Directory = template.dir
 
 	node := f(config)
 

@@ -70,52 +70,6 @@ func (o OnionMessage) HTML() string {
 }
 
 // -----------------------------------------------------------------------------
-// TorNodeInfoRequestMessage
-
-// NewEmpty implements types.Message.
-func (t TorNodeInfoRequestMessage) NewEmpty() Message {
-	return &TorNodeInfoRequestMessage{}
-}
-
-// Name implements types.Message.
-func (t TorNodeInfoRequestMessage) Name() string {
-	return "tornodeinforequest"
-}
-
-// String implements types.Message.
-func (t TorNodeInfoRequestMessage) String() string {
-	return t.Name()
-}
-
-// HTML implements types.Message.
-func (t TorNodeInfoRequestMessage) HTML() string {
-	return t.String()
-}
-
-// -----------------------------------------------------------------------------
-// TorNodeInfoReplyMessage
-
-// NewEmpty implements types.Message.
-func (t TorNodeInfoReplyMessage) NewEmpty() Message {
-	return &TorNodeInfoReplyMessage{}
-}
-
-// Name implements types.Message.
-func (t TorNodeInfoReplyMessage) Name() string {
-	return "tornodeinforeply"
-}
-
-// String implements types.Message.
-func (t TorNodeInfoReplyMessage) String() string {
-	return t.Name()
-}
-
-// HTML implements types.Message.
-func (t TorNodeInfoReplyMessage) HTML() string {
-	return t.String()
-}
-
-// -----------------------------------------------------------------------------
 // AnonymousArticleSummaryMessage
 
 // NewEmpty implements types.Message.

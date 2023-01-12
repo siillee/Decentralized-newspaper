@@ -2,8 +2,8 @@ package impl
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/rs/xid"
@@ -14,50 +14,9 @@ import (
 	"golang.org/x/xerrors"
 )
 
-/*
-This function gets public keys from the "directory servers", which are functional peer nodes.
-In our implementation those are just 10 nodes started at the beginning.
-Their addresses are hard-coded in every node.
-*/
-func (n *node) GetDirectoryServerKeys() {
-
-	z.Logger.Info().Msgf("[%s] Getting info from directory nodes", n.GetAddress())
-	startTime := time.Now()
-
-	go func() {
-		defer z.Logger.Info().Msgf("[%s] Finished getting info from directory nodes in %f seconds", n.GetAddress(), time.Since(startTime).Seconds())
-		for _, ip := range n.conf.DirectoryNodes {
-
-			n.AddPeer(ip)
-
-			// No need to send the request message to yourself.
-			if ip == n.conf.Socket.GetAddress() {
-				continue
-			}
-
-			torNodeInfoRequestMsg := types.TorNodeInfoRequestMessage{Ip: n.conf.Socket.GetAddress()}
-			transportMsg, err := n.conf.MessageRegistry.MarshalMessage(torNodeInfoRequestMsg)
-			if err != nil {
-				continue
-			}
-
-			// Loop until you see the node in the directory. The loop is needed because there could be
-			// messages lost when starting up the first "directory nodes".
-			for !n.directory.Contains(ip) {
-				_, err = n.SendTo(ip, transportMsg)
-				if err != nil {
-					continue
-				}
-				time.Sleep(time.Millisecond * 50)
-			}
-		}
-	}()
-
-}
-
 // GetDirectory implements peer.Tor
-func (n *node) GetDirectory() map[string]types.TorNode {
-	return n.directory.GetDir()
+func (n *node) GetDirectory() map[string]*rsa.PublicKey {
+	return n.conf.Directory.GetDir()
 }
 
 // CreateRandomCircuit implements peer.Tor
@@ -66,19 +25,19 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 	z.Logger.Info().Msgf("[%s] Creating new random circuit", n.GetAddress())
 	startTime := time.Now()
 
-	torNodes, err := n.directory.GetRandomNodes(3, n.conf.Socket.GetAddress())
+	torNodes, err := n.conf.Directory.GetRandomNodes(3, n.conf.Socket.GetAddress())
 	if err != nil {
 		return nil, xerrors.Errorf("error while generating random nodes for new circuit: %v", err)
 	}
 
 	circuit := types.ProxyCircuit{
 		RelayCircuit: types.RelayCircuit{
-			Id:          xid.New().String(),
-			FirstNode:   n.directory.Get(n.conf.Socket.GetAddress()),
-			SecondNode:  n.directory.Get(torNodes[0]),
-			PrevCircuit: nil,
-			NextCircuit: nil,
-			SharedKey:   nil,
+			Id:           xid.New().String(),
+			FirstNodeIp:  n.conf.Socket.GetAddress(),
+			SecondNodeIp: torNodes[0],
+			PrevCircuit:  nil,
+			NextCircuit:  nil,
+			SharedKey:    nil,
 		},
 		AllSharedKeys: nil,
 	}
@@ -107,7 +66,7 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 			return nil, xerrors.Errorf("error while marshaling onion message: %v", err)
 		}
 
-		_, err = n.SendTo(circuit.SecondNode.Ip, transportMsg)
+		_, err = n.SendTo(circuit.SecondNodeIp, transportMsg)
 		if err != nil {
 			return nil, xerrors.Errorf("error while sending onion message: %v", err)
 		}
@@ -115,10 +74,9 @@ func (n *node) CreateRandomCircuit() (*types.ProxyCircuit, error) {
 		n.keyExchangeReplyChannels.MakeChannel(circuit.Id)
 		select {
 		case keyExchangeReplyMsg := <-n.keyExchangeReplyChannels.Get(circuit.Id):
-			// TODO: Verify reply
 			hashed := sha256(keyExchangeReplyMsg.PublicKey.Bytes())
 
-			if !customCrypto.VerifyRSA(n.directory.Get(nodeIp).Pk, hashed, keyExchangeReplyMsg.Signature) {
+			if !customCrypto.VerifyRSA(n.conf.Directory.Get(nodeIp), hashed, keyExchangeReplyMsg.Signature) {
 				n.proxyCircuits.Delete(keyExchangeReplyMsg.CircuitID)
 				return nil, xerrors.Errorf("verification of key exchange reply message failed")
 			}
@@ -308,7 +266,7 @@ func (n *node) AnonymousPublishArticle(summary types.ArticleSummaryMessage, cont
 		return err
 	}
 
-	_, err = n.SendTo(circuit.SecondNode.Ip, transportMsg)
+	_, err = n.SendTo(circuit.SecondNodeIp, transportMsg)
 
 	return err
 }
@@ -346,7 +304,26 @@ func (n *node) AnonymousDownloadArticle(title, metahash string) error {
 		return err
 	}
 
-	_, err = n.SendTo(circuit.SecondNode.Ip, transportMsg)
+	_, err = n.SendTo(circuit.SecondNodeIp, transportMsg)
+
+	n.anonymousDownloadReplyChannels.MakeChannel(circuit.Id)
+	select {
+	case anonymousDownloadReplyMsg := <-n.anonymousDownloadReplyChannels.Get(title):
+		payload, err := FullDecryption(*circuit, anonymousDownloadReplyMsg.Payload)
+		if err != nil {
+			return err
+		}
+
+		// Upload the downloaded file into the node's storage.
+		metahash, err = n.Upload(bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		n.Tag(title, metahash)
+
+	case <-time.After(time.Second * 20):
+		return xerrors.Errorf("timed out while waiting for anonymous download reply")
+	}
 
 	return err
 }
@@ -411,12 +388,12 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 				}
 
 				newCircuit := types.RelayCircuit{
-					Id:          xid.New().String(),
-					FirstNode:   relayCircuit.SecondNode,
-					SecondNode:  n.directory.Get(keyExchangeReqMsg.Extend),
-					PrevCircuit: relayCircuit,
-					NextCircuit: nil,
-					SharedKey:   nil,
+					Id:           xid.New().String(),
+					FirstNodeIp:  relayCircuit.SecondNodeIp,
+					SecondNodeIp: keyExchangeReqMsg.Extend,
+					PrevCircuit:  relayCircuit,
+					NextCircuit:  nil,
+					SharedKey:    nil,
 				}
 
 				relayCircuit.NextCircuit = &newCircuit
@@ -430,7 +407,7 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 			}
 
 			onionMsg.CircuitID = relayCircuit.NextCircuit.Id
-			nextHop = relayCircuit.NextCircuit.SecondNode.Ip
+			nextHop = relayCircuit.NextCircuit.SecondNodeIp
 		} else { // If direction is backward.
 			prevCircuit := relayCircuit.PrevCircuit
 			if prevCircuit == nil {
@@ -441,7 +418,7 @@ func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) erro
 				return xerrors.Errorf("error while encrypting onion payload: %v", err)
 			}
 			onionMsg.CircuitID = prevCircuit.Id
-			nextHop = prevCircuit.FirstNode.Ip
+			nextHop = prevCircuit.FirstNodeIp
 		}
 
 		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(onionMsg)
@@ -487,16 +464,16 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 	if relayCircuit == nil {
 
 		newCircuit := types.RelayCircuit{
-			Id:          keyExchangeReqMsg.CircuitID,
-			FirstNode:   n.directory.Get(packet.Header.Source),
-			SecondNode:  n.directory.Get(n.conf.Socket.GetAddress()),
-			PrevCircuit: nil,
-			NextCircuit: nil,
-			SharedKey:   nil,
+			Id:           keyExchangeReqMsg.CircuitID,
+			FirstNodeIp:  packet.Header.Source,
+			SecondNodeIp: n.conf.Socket.GetAddress(),
+			PrevCircuit:  nil,
+			NextCircuit:  nil,
+			SharedKey:    nil,
 		}
-		if newCircuit.FirstNode.Ip == "" {
-			newCircuit.FirstNode = types.TorNode{Ip: packet.Header.Source}
-		}
+		// if newCircuit.FirstNodeIp == "" {
+		// 	newCircuit.FirstNode = types.TorNode{Ip: packet.Header.Source}
+		// }
 
 		myPrivateKey, myPublicKey := n.DHGenerateKeys()
 
@@ -526,7 +503,7 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			return xerrors.Errorf("error while marshaling key exchange reply message")
 		}
 
-		_, err = n.SendTo(newCircuit.FirstNode.Ip, transportMsg)
+		_, err = n.SendTo(newCircuit.FirstNodeIp, transportMsg)
 		if err != nil {
 			return err
 		}
@@ -536,12 +513,12 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 
 	} else if relayCircuit.NextCircuit == nil && keyExchangeReqMsg.Extend != n.conf.Socket.GetAddress() {
 		newCircuit := types.RelayCircuit{
-			Id:          xid.New().String(),
-			FirstNode:   relayCircuit.SecondNode,
-			SecondNode:  n.directory.Get(keyExchangeReqMsg.Extend),
-			PrevCircuit: relayCircuit,
-			NextCircuit: nil,
-			SharedKey:   nil,
+			Id:           xid.New().String(),
+			FirstNodeIp:  relayCircuit.SecondNodeIp,
+			SecondNodeIp: keyExchangeReqMsg.Extend,
+			PrevCircuit:  relayCircuit,
+			NextCircuit:  nil,
+			SharedKey:    nil,
 		}
 
 		relayCircuit.NextCircuit = &newCircuit
@@ -585,67 +562,13 @@ func (n *node) ExecKeyExchangeReplyMessage(msg types.Message, packet transport.P
 	z.Logger.Info().Msgf("[%s] handling Key Exchange Reply message", n.GetAddress())
 
 	proxyCircuit := n.proxyCircuits.Get(keyExchangeReplyMsg.CircuitID)
-	relayCircuit := n.relayCircuits.Get(keyExchangeReplyMsg.CircuitID)
 
 	if proxyCircuit != nil {
 		z.Logger.Info().Msgf("[%s] The Key Exchange Reply message is for me", n.GetAddress())
 		n.keyExchangeReplyChannels.Get(keyExchangeReplyMsg.CircuitID) <- *keyExchangeReplyMsg
-	} else if relayCircuit != nil {
-		prevCircuit := relayCircuit.PrevCircuit
-		if prevCircuit == nil {
-			return xerrors.Errorf("no previous circuit to forward the key exchange reply message to")
-		}
-		keyExchangeReplyMsg.CircuitID = prevCircuit.Id
-
-		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(keyExchangeReplyMsg)
-		if err != nil {
-			return xerrors.Errorf("error while marshaling key exchange reply message when forwarding it: %v", err)
-		}
-		_, err = n.SendTo(prevCircuit.FirstNode.Ip, transportMsg)
-		if err != nil {
-			return xerrors.Errorf("error while sending key exchange reply message: %v", err)
-		}
 	} else {
 		return xerrors.Errorf("circuit ID of key exchange reply message unknwon")
 	}
-
-	return nil
-}
-
-func (n *node) ExecTorNodeInfoRequestMessage(msg types.Message, packet transport.Packet) error {
-
-	_, ok := msg.(*types.TorNodeInfoRequestMessage)
-	if !ok {
-		return xerrors.Errorf("wrong message type: %T", msg)
-	}
-
-	z.Logger.Info().Msgf("[%s] handling TorNode Info Request message", n.GetAddress())
-
-	n.AddPeer(packet.Header.Source)
-
-	torNodeInfoReplyMsg := types.TorNodeInfoReplyMessage{
-		Ip: n.conf.Socket.GetAddress(),
-		Pk: &n.conf.PrivateKey.PublicKey,
-	}
-	transportMsg, err := n.conf.MessageRegistry.MarshalMessage(torNodeInfoReplyMsg)
-	if err != nil {
-		return err
-	}
-	_, err = n.SendTo(packet.Header.Source, transportMsg)
-
-	return err
-}
-
-func (n *node) ExecTorNodeInfoReplyMessage(msg types.Message, packet transport.Packet) error {
-
-	torNodeInfoReplyMsg, ok := msg.(*types.TorNodeInfoReplyMessage)
-	if !ok {
-		return xerrors.Errorf("wrong message type: %T", msg)
-	}
-
-	z.Logger.Info().Msgf("[%s] handling TorNode Info Reply message", n.GetAddress())
-
-	n.directory.Add(torNodeInfoReplyMsg.Ip, types.TorNode{Ip: torNodeInfoReplyMsg.Ip, Pk: torNodeInfoReplyMsg.Pk})
 
 	return nil
 }
@@ -679,7 +602,7 @@ func (n *node) ExecAnonymousArticleSummaryMessage(msg types.Message, packet tran
 			return xerrors.Errorf("error while marshaling anonymous article message: %v", err)
 		}
 
-		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNode.Ip, transportMsg)
+		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNodeIp, transportMsg)
 		if err != nil {
 			return xerrors.Errorf("error while sending anonymous article message: %v", err)
 		}
@@ -742,7 +665,7 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 			return xerrors.Errorf("error while marshaling anonymous download message: %v", err)
 		}
 
-		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNode.Ip, transportMsg)
+		_, err = n.SendTo(relayCircuit.NextCircuit.SecondNodeIp, transportMsg)
 		if err != nil {
 			return xerrors.Errorf("error while sending anonymous download message: %v", err)
 		}
@@ -753,8 +676,6 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 		if err != nil {
 			return xerrors.Errorf("error while unmarshaling article info from anonymous download message: %v", err)
 		}
-
-		fmt.Printf("%s : Article Info: Title - %s ; Metahash - %s \n", n.GetAddress(), articleInfo.Title, articleInfo.Metahash)
 
 		file, err := n.DownloadArticle(articleInfo.Title, articleInfo.Metahash)
 		if err != nil {
@@ -776,7 +697,7 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 			return xerrors.Errorf("error while marshaling anonymous data reply message")
 		}
 
-		_, err = n.SendTo(relayCircuit.FirstNode.Ip, transportMsg)
+		_, err = n.SendTo(relayCircuit.FirstNodeIp, transportMsg)
 		if err != nil {
 			return err
 		}
@@ -802,18 +723,7 @@ func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet trans
 	}
 
 	if proxyCircuit != nil { // Case in which this node is the originator of the anonymous download.
-
-		payload, err := FullDecryption(*proxyCircuit, anonymousDownloadReplyMsg.Payload)
-		if err != nil {
-			return err
-		}
-
-		// Upload the downloaded file into the node's storage.
-		_, err = n.Upload(bytes.NewReader(payload))
-		if err != nil {
-			return err
-		}
-
+		n.anonymousDownloadReplyChannels.Add(anonymousDownloadReplyMsg.CircuitID, *anonymousDownloadReplyMsg)
 	} else if relayCircuit != nil { // Case in which this node is just a relay.
 
 		payload, err := RelayEncryption(*relayCircuit.PrevCircuit, anonymousDownloadReplyMsg.Payload)
@@ -829,7 +739,7 @@ func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet trans
 			return xerrors.Errorf("error while marshaling anonymous download reply message: %v", err)
 		}
 
-		_, err = n.SendTo(relayCircuit.PrevCircuit.FirstNode.Ip, transportMsg)
+		_, err = n.SendTo(relayCircuit.PrevCircuit.FirstNodeIp, transportMsg)
 		if err != nil {
 			return err
 		}

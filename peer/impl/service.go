@@ -24,8 +24,6 @@ func (n *node) Start() error {
 
 	go n.heartbeatMechanism()
 
-	n.GetDirectoryServerKeys()
-
 	return nil
 }
 
@@ -58,8 +56,8 @@ func (n *node) RegisterHandlers() {
 		types.OnionMessage{},
 		types.KeyExchangeRequestMessage{},
 		types.KeyExchangeReplyMessage{},
-		types.TorNodeInfoRequestMessage{},
-		types.TorNodeInfoReplyMessage{},
+		// types.TorNodeInfoRequestMessage{},
+		// types.TorNodeInfoReplyMessage{},
 		types.AnonymousArticleSummaryMessage{},
 		types.AnonymousDownloadRequestMessage{},
 		types.AnonymousDownloadReplyMessage{},
@@ -82,8 +80,8 @@ func (n *node) RegisterHandlers() {
 		n.ExecOnionMessage,
 		n.ExecKeyExchangeRequestMessage,
 		n.ExecKeyExchangeReplyMessage,
-		n.ExecTorNodeInfoRequestMessage,
-		n.ExecTorNodeInfoReplyMessage,
+		// n.ExecTorNodeInfoRequestMessage,
+		// n.ExecTorNodeInfoReplyMessage,
 		n.ExecAnonymousArticleSummaryMessage,
 		n.ExecAnonymousDownloadRequestMessage,
 		n.ExecAnonymousDownloadReplyMessage,

@@ -20,11 +20,11 @@ A map which contains information about nodes participating in the Tor network.
 It is thread-safe and has some basic functionalities.
 */
 type Directory struct {
-	sync.Mutex
-	Dir map[string]TorNode
+	*sync.Mutex
+	Dir map[string]*rsa.PublicKey
 }
 
-func (d *Directory) Add(ip string, info TorNode) bool {
+func (d *Directory) Add(ip string, key *rsa.PublicKey) bool {
 	d.Lock()
 	defer d.Unlock()
 
@@ -33,18 +33,18 @@ func (d *Directory) Add(ip string, info TorNode) bool {
 		return false
 	}
 
-	d.Dir[ip] = info
+	d.Dir[ip] = key
 	return true
 }
 
-func (d *Directory) Get(ip string) TorNode {
+func (d *Directory) Get(ip string) *rsa.PublicKey {
 	d.Lock()
 	defer d.Unlock()
 
 	return d.Dir[ip]
 }
 
-func (d *Directory) GetDir() map[string]TorNode {
+func (d *Directory) GetDir() map[string]*rsa.PublicKey {
 	d.Lock()
 	defer d.Unlock()
 
@@ -69,9 +69,9 @@ func (d *Directory) GetRandomNodes(num int, excluded ...string) ([]string, error
 	}
 
 	possibleNodes := make([]string, 0)
-	for _, torNode := range d.Dir {
-		if !contains(excluded, torNode.Ip) {
-			possibleNodes = append(possibleNodes, torNode.Ip)
+	for ip := range d.Dir {
+		if !contains(excluded, ip) {
+			possibleNodes = append(possibleNodes, ip)
 		}
 	}
 
@@ -95,19 +95,19 @@ func contains(arr []string, str string) bool {
 }
 
 /*
-This is the circuit which relay nodes have (the ones not initiating the requests).
+This is the circuit which relay nodes have (the ones not initiating requests).
 Each relay node has two relay circuits per big circuit (by big circuit, the full circuit with
 all nodes is meant), except the exit node, which has one, and then connects to the whole network
 on the other side. Each relay circuit connects two nodes on each side (e.g. A-B-C, B has a relay circuit
 both with A and C) in the big circuit.
 */
 type RelayCircuit struct {
-	Id          string
-	FirstNode   TorNode
-	SecondNode  TorNode
-	PrevCircuit *RelayCircuit
-	NextCircuit *RelayCircuit
-	SharedKey   []byte // Key generated in the key exchange protocol.
+	Id           string
+	FirstNodeIp  string
+	SecondNodeIp string
+	PrevCircuit  *RelayCircuit
+	NextCircuit  *RelayCircuit
+	SharedKey    []byte // Key generated in the key exchange protocol.
 }
 
 /*
@@ -181,29 +181,63 @@ type KeyExchangeReplyChannels struct {
 	ChannelMap map[string](chan KeyExchangeReplyMessage)
 }
 
-func (kepc *KeyExchangeReplyChannels) Add(id string, msg KeyExchangeReplyMessage) {
-	kepc.Lock()
-	defer kepc.Unlock()
+func (kerc *KeyExchangeReplyChannels) Add(id string, msg KeyExchangeReplyMessage) {
+	kerc.Lock()
+	defer kerc.Unlock()
 
-	_, check := kepc.ChannelMap[id]
+	_, check := kerc.ChannelMap[id]
 	if !check {
-		kepc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
+		kerc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
 	}
-	kepc.ChannelMap[id] <- msg
+	kerc.ChannelMap[id] <- msg
 }
 
-func (kepc *KeyExchangeReplyChannels) MakeChannel(id string) {
-	kepc.Lock()
-	defer kepc.Unlock()
+func (kerc *KeyExchangeReplyChannels) MakeChannel(id string) {
+	kerc.Lock()
+	defer kerc.Unlock()
 
-	kepc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
+	kerc.ChannelMap[id] = make(chan KeyExchangeReplyMessage)
 }
 
-func (kepc *KeyExchangeReplyChannels) Get(id string) chan KeyExchangeReplyMessage {
-	kepc.Lock()
-	defer kepc.Unlock()
+func (kerc *KeyExchangeReplyChannels) Get(id string) chan KeyExchangeReplyMessage {
+	kerc.Lock()
+	defer kerc.Unlock()
 
-	return kepc.ChannelMap[id]
+	return kerc.ChannelMap[id]
+}
+
+/*
+A thread-safe map containing channels for anonymous download reply messages.
+Has some basic functionalities.
+*/
+type AnonymousDownloadReplyChannels struct {
+	sync.Mutex
+	ChannelMap map[string](chan AnonymousDownloadReplyMessage)
+}
+
+func (adrc *AnonymousDownloadReplyChannels) Add(id string, msg AnonymousDownloadReplyMessage) {
+	adrc.Lock()
+	defer adrc.Unlock()
+
+	_, check := adrc.ChannelMap[id]
+	if !check {
+		adrc.ChannelMap[id] = make(chan AnonymousDownloadReplyMessage)
+	}
+	adrc.ChannelMap[id] <- msg
+}
+
+func (adrc *AnonymousDownloadReplyChannels) MakeChannel(id string) {
+	adrc.Lock()
+	defer adrc.Unlock()
+
+	adrc.ChannelMap[id] = make(chan AnonymousDownloadReplyMessage)
+}
+
+func (adrc *AnonymousDownloadReplyChannels) Get(id string) chan AnonymousDownloadReplyMessage {
+	adrc.Lock()
+	defer adrc.Unlock()
+
+	return adrc.ChannelMap[id]
 }
 
 //------------------------------Messages------------------------------
@@ -246,16 +280,6 @@ type AnonymousDownloadReplyMessage struct {
 	CircuitID string
 	// Information on wanted article (type ArticleInfo) --- in form of byte array payload
 	Payload []byte
-}
-
-// Structs representing messages necessary for getting info on tor nodes from directory nodes.
-type TorNodeInfoRequestMessage struct {
-	Ip string
-}
-
-type TorNodeInfoReplyMessage struct {
-	Ip string
-	Pk *rsa.PublicKey
 }
 
 //------------------------------Helper structs------------------------------
