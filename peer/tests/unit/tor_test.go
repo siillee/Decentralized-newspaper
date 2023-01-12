@@ -82,7 +82,9 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
 		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
 	defer node2.Stop()
-	time.Sleep(time.Second * 2)
+
+	node1.AddPeer(node2.GetAddr())
+	node2.AddPeer(node1.GetAddr())
 
 	for _, server := range directoryServers {
 		server.AddPeer(node1.GetAddr(), node2.GetAddr())
@@ -111,7 +113,7 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 		Title:     title,
 	}, content)
 	// Enough time for the message to reach node2.
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 3)
 
 	ins2 := node2.GetIns()
 	var address string
@@ -153,7 +155,8 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 	defer node2.Stop()
 
 	for _, server := range directoryServers {
-		server.AddPeer(node1.GetAddr(), node2.GetAddr())
+		server.AddPeer(node1.GetAddr())
+		server.AddPeer(node2.GetAddr())
 	}
 
 	title := "LoremIpsum"
@@ -180,11 +183,11 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, mh, metahash)
 
-	node2.GetStorage().GetNamingStore().Set(title, []byte(metahash))
+	// node2.GetStorage().GetNamingStore().Set(title, []byte(metahash))
+	node2.Tag(title, metahash)
 	require.Equal(t, 1, node2.GetStorage().GetNamingStore().Len())
 
 	err = node1.AnonymousDownloadArticle(title, metahash)
-	time.Sleep(time.Second * 1)
 	require.NoError(t, err)
 
 	// Check if node1 got the article.

@@ -471,9 +471,6 @@ func (n *node) ExecKeyExchangeRequestMessage(msg types.Message, packet transport
 			NextCircuit:  nil,
 			SharedKey:    nil,
 		}
-		// if newCircuit.FirstNodeIp == "" {
-		// 	newCircuit.FirstNode = types.TorNode{Ip: packet.Header.Source}
-		// }
 
 		myPrivateKey, myPublicKey := n.DHGenerateKeys()
 

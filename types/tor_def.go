@@ -266,7 +266,7 @@ type OnionMessage struct {
 // Structs representing anonymous messages sent by nodes (users).
 type AnonymousArticleSummaryMessage struct {
 	CircuitID string
-	// ArticleSummaryMessage --- in form of byte array payload
+	// Article (type AnonymousArticle) --- in form of byte array payload
 	Payload []byte
 }
 
