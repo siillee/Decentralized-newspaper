@@ -272,11 +272,11 @@ func (n *node) AnonymousPublishArticle(summary types.ArticleSummaryMessage, cont
 }
 
 // AnonymousDownloadArticle implements peer.Tor
-func (n *node) AnonymousDownloadArticle(title, metahash string) error {
+func (n *node) AnonymousDownloadArticle(title, metahash string) ([]byte, error) {
 
 	circuit, err := n.CreateRandomCircuit()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	articleInfo := types.ArticleInfo{
@@ -286,12 +286,12 @@ func (n *node) AnonymousDownloadArticle(title, metahash string) error {
 
 	payload, err := json.Marshal(articleInfo)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	payload, err = FullEncryption(*circuit, payload)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	anonymousDownloadReqMsg := types.AnonymousDownloadRequestMessage{
@@ -301,31 +301,34 @@ func (n *node) AnonymousDownloadArticle(title, metahash string) error {
 
 	transportMsg, err := n.conf.MessageRegistry.MarshalMessage(anonymousDownloadReqMsg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	_, err = n.SendTo(circuit.SecondNodeIp, transportMsg)
+	if err != nil {
+		return nil, err
+	}
 
 	n.anonymousDownloadReplyChannels.MakeChannel(circuit.Id)
 	select {
-	case anonymousDownloadReplyMsg := <-n.anonymousDownloadReplyChannels.Get(title):
+	case anonymousDownloadReplyMsg := <-n.anonymousDownloadReplyChannels.Get(circuit.Id):
 		payload, err := FullDecryption(*circuit, anonymousDownloadReplyMsg.Payload)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// Upload the downloaded file into the node's storage.
 		metahash, err = n.Upload(bytes.NewReader(payload))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		n.Tag(title, metahash)
 
-	case <-time.After(time.Second * 20):
-		return xerrors.Errorf("timed out while waiting for anonymous download reply")
-	}
+		return payload, nil
 
-	return err
+	case <-time.After(time.Second * 10):
+		return nil, xerrors.Errorf("timed out while waiting for anonymous download reply")
+	}
 }
 
 func (n *node) ExecOnionMessage(msg types.Message, packet transport.Packet) error {
@@ -611,7 +614,7 @@ func (n *node) ExecAnonymousArticleSummaryMessage(msg types.Message, packet tran
 			return err
 		}
 
-		metahash, err := n.Upload(bytes.NewReader([]byte(article.Content)))
+		metahash, err := n.Upload(bytes.NewBuffer([]byte(article.Content)))
 		if err != nil {
 			return err
 		}
@@ -674,33 +677,40 @@ func (n *node) ExecAnonymousDownloadRequestMessage(msg types.Message, packet tra
 			return xerrors.Errorf("error while unmarshaling article info from anonymous download message: %v", err)
 		}
 
+		n.DownloadThread(articleInfo, *anonymousDownloadReqMsg, *relayCircuit)
+
+	}
+
+	return nil
+}
+
+func (n *node) DownloadThread(articleInfo types.ArticleInfo, msg types.AnonymousDownloadRequestMessage, relayCircuit types.RelayCircuit) {
+	go func() {
 		file, err := n.DownloadArticle(articleInfo.Title, articleInfo.Metahash)
 		if err != nil {
-			return err
+			return
 		}
 
-		replyPayload, err := RelayEncryption(*relayCircuit, file)
+		replyPayload, err := RelayEncryption(relayCircuit, file)
 		if err != nil {
-			return err
+			return
 		}
 
 		anonymousDownloadReplyMsg := types.AnonymousDownloadReplyMessage{
-			CircuitID: anonymousDownloadReqMsg.CircuitID,
+			CircuitID: msg.CircuitID,
 			Payload:   replyPayload,
 		}
 
 		transportMsg, err := n.conf.MessageRegistry.MarshalMessage(anonymousDownloadReplyMsg)
 		if err != nil {
-			return xerrors.Errorf("error while marshaling anonymous data reply message")
+			return
 		}
 
 		_, err = n.SendTo(relayCircuit.FirstNodeIp, transportMsg)
 		if err != nil {
-			return err
+			return
 		}
-	}
-
-	return nil
+	}()
 }
 
 func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet transport.Packet) error {
@@ -720,7 +730,9 @@ func (n *node) ExecAnonymousDownloadReplyMessage(msg types.Message, packet trans
 	}
 
 	if proxyCircuit != nil { // Case in which this node is the originator of the anonymous download.
-		n.anonymousDownloadReplyChannels.Add(anonymousDownloadReplyMsg.CircuitID, *anonymousDownloadReplyMsg)
+		go func() {
+			n.anonymousDownloadReplyChannels.Add(anonymousDownloadReplyMsg.CircuitID, *anonymousDownloadReplyMsg)
+		}()
 	} else if relayCircuit != nil { // Case in which this node is just a relay.
 
 		payload, err := RelayEncryption(*relayCircuit.PrevCircuit, anonymousDownloadReplyMsg.Payload)

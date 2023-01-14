@@ -77,6 +77,8 @@ type Configuration struct {
 
 	// Contains a mapping of ip address to public key of the directory nodes.
 	Directory types.Directory
+
+	TorEnabled bool
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

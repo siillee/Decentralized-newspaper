@@ -147,8 +147,8 @@ type configTemplate struct {
 	dhParams   peer.DHParameters
 
 	directoryNodes []string
-
-	dir types.Directory
+	dir            types.Directory
+	torEnabled     bool
 }
 
 func newConfigTemplate() configTemplate {
@@ -292,6 +292,13 @@ func WithDirectory(torNodes []types.TorNode) Option {
 	}
 }
 
+// WithTor sets Tor to enabled(true) or disabled(false)
+func WithTor(enabled bool) Option {
+	return func(ct *configTemplate) {
+		ct.torEnabled = enabled
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -319,6 +326,7 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.DH = template.dhParams
 	config.DirectoryNodes = template.directoryNodes
 	config.Directory = template.dir
+	config.TorEnabled = template.torEnabled
 
 	node := f(config)
 

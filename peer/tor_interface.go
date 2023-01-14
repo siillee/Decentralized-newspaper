@@ -38,5 +38,5 @@ type Tor interface {
 		and sends the download request.The exit node of the circuit downloads the article,
 		and then sends it back through the circuit, where it reaches the original node at the end.
 	*/
-	AnonymousDownloadArticle(title, metahash string) error
+	AnonymousDownloadArticle(title, metahash string) ([]byte, error)
 }

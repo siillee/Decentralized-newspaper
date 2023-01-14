@@ -1,9 +1,7 @@
 package impl
 
 import (
-	rd "crypto/rand"
 	"crypto/rsa"
-	"math/big"
 	"math/rand"
 	"sort"
 	"sync"
@@ -27,7 +25,6 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	voteStore := concurrent.NewVoteStore()
 	commentStore := concurrent.NewCommentStore()
 	ackChannels := concurrent.NewAckChannels()
-	dhKeyStore := concurrent.NewDHKeyStore()
 
 	// the peer's routing table should contain one element, the peer’s address and relay to itself
 	peerAddress := conf.Socket.GetAddress()
@@ -54,7 +51,6 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		voteStore:                      voteStore,
 		catalog:                        catalog,
 		pkMap:                          pkMap,
-		dhKeyStore:                     dhKeyStore,
 		directory:                      types.Directory{Dir: make(map[string]*rsa.PublicKey)},
 		proxyCircuits:                  types.ConcurrentProxyCircuits{ProxyCircuits: make(map[string]*types.ProxyCircuit)},
 		relayCircuits:                  types.ConcurrentRelayCircuits{RelayCircuits: make(map[string]*types.RelayCircuit)},
@@ -87,7 +83,6 @@ type node struct {
 	summaryStore                   concurrent.SummaryStore
 	voteStore                      concurrent.VoteStore
 	commentStore                   concurrent.CommentStore
-	dhKeyStore                     concurrent.DHKeyStore
 	catalog                        peer.Catalog
 	requestManager                 request.Manager
 	pkMap                          map[string]rsa.PublicKey
@@ -586,70 +581,6 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 
 	if pkt.Header.Source == voteMessage.UserID {
 		n.voteStore.Add(*voteMessage)
-	}
-
-	return nil
-}
-
-func (n *node) ExecDHPublicKeyMessage(msg types.Message, pkt transport.Packet) error {
-	dhPublicKeyMessage, ok := msg.(*types.DHPublicKeyMessage)
-
-	if !ok {
-		return xerrors.Errorf("wrong type: %T", msg)
-	}
-
-	z.Logger.Info().Msgf("[%s] dhPublicKey message received from %s", n.GetAddress(), pkt.Header.Source)
-
-	publicKey := dhPublicKeyMessage.PublicKey
-
-	// check group membership (avoids MITM attacks)
-	one := new(big.Int).SetInt64(1)
-	if publicKey.Cmp(one) <= 0 || publicKey.Cmp(n.conf.DH.P) >= 0 {
-		return xerrors.Errorf("[%s] dh public key has invalid format (wrong range)")
-	}
-	checkPK := new(big.Int).SetInt64(0)
-	checkPK.Exp(publicKey, n.conf.DH.Q, n.conf.DH.P)
-	if checkPK.Cmp(one) != 0 {
-		return xerrors.Errorf("[%s] dh public key has invalid format (wrong order)")
-	}
-
-	//check if it was already waiting for a dhPublicKeyMessage
-	dhKeys, ok := n.dhKeyStore.Get(dhPublicKeyMessage.UserID)
-	if ok {
-		//node already has his private key
-		privateKey := dhKeys.Private
-
-		// compute shared secret
-		secret := new(big.Int).SetInt64(0)
-		secret.Exp(publicKey, &privateKey, n.conf.DH.P)
-		n.dhKeyStore.SetSharedSecret(dhPublicKeyMessage.UserID, *secret)
-
-		// notify
-		dhKeys.NotifyChannel <- true
-	} else {
-		//generate a private key + compute shared secret + send your associated public key
-		privateKey := new(big.Int).SetInt64(0)
-		myPublicKey := new(big.Int).SetInt64(0)
-
-		privateKey, _ = rd.Int(rd.Reader, n.conf.DH.Q)
-		n.dhKeyStore.SetPrivate(dhPublicKeyMessage.UserID, *privateKey)
-
-		secret := new(big.Int).SetInt64(0)
-		secret.Exp(publicKey, privateKey, n.conf.DH.P)
-		n.dhKeyStore.SetSharedSecret(dhPublicKeyMessage.UserID, *secret)
-
-		myPublicKey.Exp(n.conf.DH.G, privateKey, n.conf.DH.P)
-
-		reply := types.DHPublicKeyMessage{
-			UserID:    n.GetAddress(),
-			PublicKey: myPublicKey,
-		}
-
-		replyTransportMessage, err := types.ToTransport(reply)
-		if err != nil {
-			return xerrors.Errorf("failed to build reply DHPublicKey transport message")
-		}
-		return n.Unicast(pkt.Header.Source, replyTransportMessage)
 	}
 
 	return nil

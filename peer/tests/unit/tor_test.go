@@ -18,23 +18,24 @@ import (
 	"go.dedis.ch/cs438/types"
 )
 
+// Testing circuit creation with just one node.
 func Test_Tor_Circuit_Create_Single(t *testing.T) {
 
 	udp := udp.NewUDP()
 	privateKeys := generateRSAKeys(10)
 	dir := getDirectory(privateKeys)
 
-	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
-	for _, server := range directoryServers {
-		defer server.Stop()
+	directoryNodes := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, node := range directoryNodes {
+		defer node.Stop()
 	}
 
 	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true))
 	defer node1.Stop()
 
-	for _, server := range directoryServers {
-		server.AddPeer(node1.GetAddr())
+	for _, node := range directoryNodes {
+		node.AddPeer(node1.GetAddr())
 	}
 
 	circuit, err := node1.CreateRandomCircuit()
@@ -42,15 +43,16 @@ func Test_Tor_Circuit_Create_Single(t *testing.T) {
 	require.Len(t, circuit.AllSharedKeys, 3)
 }
 
+// Testing circuit creation whenn 100 nodes are creating one simultaneously.
 func Test_Tor_Circuit_Create_Multiple(t *testing.T) {
 
 	udp := udp.NewUDP()
 	privateKeys := generateRSAKeys(10)
 	dir := getDirectory(privateKeys)
 
-	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
-	for _, server := range directoryServers {
-		defer server.Stop()
+	directoryNodes := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, node := range directoryNodes {
+		defer node.Stop()
 	}
 
 	testNodes := startNodes(udp, 100, false, dir, privateKeys, t)
@@ -65,29 +67,31 @@ func Test_Tor_Circuit_Create_Multiple(t *testing.T) {
 	time.Sleep(time.Second * 5)
 }
 
+// Testing anonymous broadcast and whether the Rumor origin of the broadcast message
+// is not equal to node1's address, who is broadcasting the article.
 func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 
 	udp := udp.NewUDP()
 	privateKeys := generateRSAKeys(10)
 	dir := getDirectory(privateKeys)
 
-	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
-	for _, server := range directoryServers {
-		defer server.Stop()
+	directoryNodes := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, node := range directoryNodes {
+		defer node.Stop()
 	}
 
 	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true), z.WithAntiEntropy(time.Second*5))
 	defer node1.Stop()
 	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true), z.WithAntiEntropy(time.Second*5))
 	defer node2.Stop()
 
 	node1.AddPeer(node2.GetAddr())
 	node2.AddPeer(node1.GetAddr())
 
-	for _, server := range directoryServers {
-		server.AddPeer(node1.GetAddr(), node2.GetAddr())
+	for _, node := range directoryNodes {
+		node.AddPeer(node1.GetAddr(), node2.GetAddr())
 	}
 
 	title := "LoremIpsum"
@@ -113,7 +117,7 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 		Title:     title,
 	}, content)
 	// Enough time for the message to reach node2.
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 2)
 
 	ins2 := node2.GetIns()
 	var address string
@@ -121,14 +125,16 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 	for _, x := range ins2 {
 		if x.Msg.Type == (types.RumorsMessage{}).Name() {
 			json.Unmarshal(x.Msg.Payload, &rumors)
-			break
+			if rumors.Rumors[0].Msg.Type == (types.ArticleSummaryMessage{}).Name() {
+				address = rumors.Rumors[0].Origin
+				break
+			}
 		}
 	}
-	address = rumors.Rumors[0].Origin
 
 	require.NotEqual(t, node1.GetAddr(), address)
 
-	for _, dirNode := range directoryServers {
+	for _, dirNode := range directoryNodes {
 		if dirNode.GetStorage().GetDataBlobStore().Len() > 0 {
 			require.Equal(t, metahash, string(dirNode.GetStorage().GetNamingStore().Get(title)))
 			break
@@ -136,27 +142,24 @@ func Test_Tor_Anonymous_Broadcast(t *testing.T) {
 	}
 }
 
-func Test_Tor_Anonymous_Download(t *testing.T) {
+// Testing anonymous download when the exit node has the requested file.
+func Test_Tor_Anonymous_Download_Local(t *testing.T) {
 
 	udp := udp.NewUDP()
 	privateKeys := generateRSAKeys(10)
 	dir := getDirectory(privateKeys)
 
-	directoryServers := startNodes(udp, 10, true, dir, privateKeys, t)
-	for _, server := range directoryServers {
-		defer server.Stop()
+	directoryNodes := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, node := range directoryNodes {
+		defer node.Stop()
 	}
 
 	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir))
-	defer node2.Stop()
 
-	for _, server := range directoryServers {
-		server.AddPeer(node1.GetAddr())
-		server.AddPeer(node2.GetAddr())
+	for _, node := range directoryNodes {
+		node.AddPeer(node1.GetAddr())
 	}
 
 	title := "LoremIpsum"
@@ -177,34 +180,85 @@ func Test_Tor_Anonymous_Download(t *testing.T) {
 
 	mh := "2da39247e2a131dd97fb311e0c477cde445e3d3269599fdd119ff2c1ae1199a6"
 
-	data := bytes.NewBuffer([]byte(content))
+	// Put the file in all directory nodes, since creating the circuit is random.
+	for _, node := range directoryNodes {
+		data := bytes.NewBuffer([]byte(content))
+		mh, err := node.Upload(data)
+		require.NoError(t, err)
+		node.Tag(title, mh)
+	}
 
-	metahash, err := node2.Upload(data)
+	downloadedContent, err := node1.AnonymousDownloadArticle(title, mh)
 	require.NoError(t, err)
-	require.Equal(t, mh, metahash)
-
-	// node2.GetStorage().GetNamingStore().Set(title, []byte(metahash))
-	node2.Tag(title, metahash)
-	require.Equal(t, 1, node2.GetStorage().GetNamingStore().Len())
-
-	err = node1.AnonymousDownloadArticle(title, metahash)
-	require.NoError(t, err)
+	require.Equal(t, content, string(downloadedContent))
 
 	// Check if node1 got the article.
-	require.Equal(t, 1, node1.GetStorage().GetDataBlobStore().Len())
+	require.Equal(t, mh, string(node1.GetStorage().GetNamingStore().Get(title)))
+	require.Equal(t, 2, node1.GetStorage().GetDataBlobStore().Len())
+}
 
-	// Check if some directory node downloaded the article, since one of them will be the exit node
-	// in node1's circuit.
-	for _, dirNode := range directoryServers {
-		if dirNode.GetStorage().GetDataBlobStore().Len() != 0 {
-			require.Equal(t, metahash, string(dirNode.GetStorage().GetNamingStore().Get(title)))
-			break
-		}
+// Testing anonymous download when the exit node does not have the requested file and needs to search for it.
+func Test_Tor_Anonymous_Download_Remote(t *testing.T) {
+
+	udp := udp.NewUDP()
+	privateKeys := generateRSAKeys(10)
+	dir := getDirectory(privateKeys)
+
+	directoryNodes := startNodes(udp, 10, true, dir, privateKeys, t)
+	for _, node := range directoryNodes {
+		defer node.Stop()
 	}
+
+	node1 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true))
+	defer node1.Stop()
+	node2 := z.NewTestNode(t, peerFac, udp, "127.0.0.1:0", z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
+		z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true))
+	defer node2.Stop()
+
+	for _, node := range directoryNodes {
+		node.AddPeer(node1.GetAddr(), node2.GetAddr())
+	}
+
+	title := "LoremIpsum"
+	content := " Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam varius maximus tellus, vel congue nunc" +
+		" efficitur a. Duis vel sagittis lacus, a vulputate massa. Maecenas molestie tempor felis sit amet sodales. " +
+		"Pellentesque porttitor convallis neque, iaculis maximus quam scelerisque blandit. Maecenas euismod nibh mi, " +
+		"vel egestas mi vulputate ut. Mauris iaculis mattis est sed sodales. Mauris hendrerit malesuada lectus ut " +
+		"dictum.\n\nDonec ornare lectus nec nunc maximus, at posuere ante posuere. Quisque finibus ex facilisis, " +
+		"tristique elit eu, pulvinar ex. Curabitur accumsan at ex quis condimentum. Pellentesque mi nulla, tempor " +
+		"posuere tellus fermentum, porta ullamcorper purus. Quisque id congue odio. Quisque imperdiet id velit nec " +
+		"placerat. Nunc blandit, orci in volutpat congue, orci eros congue lectus, sit amet elementum ligula dui vitae " +
+		"ligula. Proin tincidunt facilisis risus, non tempus ex semper eu. Vivamus ultrices magna et posuere finibus." +
+		"\n\nNunc blandit, enim ullamcorper viverra scelerisque, quam magna volutpat justo, quis placerat augue magna " +
+		"eget sapien. In dignissim magna nisi, vel fermentum turpis consequat eget. Aenean consequat pretium nulla non " +
+		"blandit. Vestibulum sodales nibh vel sapien aliquet, vitae rhoncus metus suscipit. Nulla non mi accumsan, " +
+		"tincidunt dui at, iaculis nisl. Aliquam convallis finibus ipsum. Quisque id massa vestibulum, congue velit eu," +
+		" viverra orci. Vivamus metus metus, dictum non porta posuere, commodo sit amet arcu. "
+
+	mh := "2da39247e2a131dd97fb311e0c477cde445e3d3269599fdd119ff2c1ae1199a6"
+
+	metahash, err := node2.Upload(bytes.NewBuffer([]byte(content)))
+	require.NoError(t, err)
+	require.Equal(t, mh, metahash)
+	require.Equal(t, 2, node2.GetStorage().GetDataBlobStore().Len())
+
+	err = node2.Tag(title, metahash)
+	require.NoError(t, err)
+	require.Equal(t, 1, node2.GetStorage().GetNamingStore().Len())
+
+	downloadedContent, err := node1.AnonymousDownloadArticle(title, mh)
+	require.NoError(t, err)
+	require.Equal(t, content, string(downloadedContent))
+
+	require.Equal(t, 2, node1.GetStorage().GetDataBlobStore().Len())
+	require.Equal(t, 1, node1.GetStorage().GetNamingStore().Len())
 }
 
 //----------------------------------Helper functions---------------------------------------------
 
+// Starts "num" nodes which use UDP.
+// Boolean value "directory" represents whether directory(true), or regular(false) nodes will be created.
 func startNodes(udp transport.Transport, num int, directory bool, dir []types.TorNode, keys []*rsa.PrivateKey, t *testing.T) []z.TestNode {
 
 	result := make([]z.TestNode, 0)
@@ -217,19 +271,20 @@ func startNodes(udp transport.Transport, num int, directory bool, dir []types.To
 				address = "127.0.0.1:20" + fmt.Sprint(i)
 			}
 			result = append(result, z.NewTestNode(t, peerFac, udp, address, z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(num)),
-				z.WithPrivateKey(keys[i]), z.WithDirectory(dir)))
+				z.WithPrivateKey(keys[i]), z.WithDirectory(dir), z.WithTor(false)))
 		}
 	} else {
 		address := "127.0.0.1:0"
 		for i := 0; i < num; i++ {
 			result = append(result, z.NewTestNode(t, peerFac, udp, address, z.WithDHParams(generateDHParameters()), z.WithDirectoryNodes(getDirectoryNodes(10)),
-				z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir)))
+				z.WithPrivateKey(generateRSAKey()), z.WithDirectory(dir), z.WithTor(true)))
 		}
 	}
 
 	return result
 }
 
+// Generates a "num" number of RSA keys
 func generateRSAKeys(num int) []*rsa.PrivateKey {
 
 	result := make([]*rsa.PrivateKey, 0)
@@ -255,6 +310,7 @@ func getDirectory(keys []*rsa.PrivateKey) []types.TorNode {
 	return result
 }
 
+// Generates parameters for the Diffie-Hellman key exchange protocol.
 func generateDHParameters() (*big.Int, *big.Int, *big.Int) {
 
 	p := new(big.Int).SetInt64(0)
@@ -266,6 +322,7 @@ func generateDHParameters() (*big.Int, *big.Int, *big.Int) {
 	return p, q, g
 }
 
+// Returns addresses of a "num" number of directory nodes.
 func getDirectoryNodes(num int) []string {
 
 	result := make([]string, 0)
@@ -281,12 +338,14 @@ func getDirectoryNodes(num int) []string {
 	return result
 }
 
+// Generates one RSA key.
 func generateRSAKey() *rsa.PrivateKey {
 
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	return key
 }
 
+// Creates a circuit, with "node" being the initiator.
 func createCicruit(node z.TestNode, t *testing.T) {
 	go func() {
 		circuit, err := node.CreateRandomCircuit()
