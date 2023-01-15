@@ -194,7 +194,7 @@ func newConfigTemplate() configTemplate {
 		overwhelmingThreshold: 10.0,
 		voteTimeout:           time.Hour * 24 * 7 * 2,
 		checkProofThreshold:   1000,
-		proofDifficulty:       24,
+		proofDifficulty:       0,
 	}
 }
 

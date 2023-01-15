@@ -167,7 +167,7 @@ func main() {
 					&urfave.UintFlag{
 						Name:  "proofDifficulty",
 						Usage: "The number of zeroes required at the end of the proof of work hash",
-						Value: 24,
+						Value: 0,
 					},
 				},
 				Action: start,

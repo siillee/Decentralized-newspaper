@@ -95,7 +95,7 @@ type Configuration struct {
 	CheckProofThreshold uint
 	// The number of zeroes required at the end of the proof of work hash.
 	// Increases the time complexity exponentially.
-	// Default: 24
+	// Default: 0
 	ProofDifficulty uint
 
 	DH DHParameters
