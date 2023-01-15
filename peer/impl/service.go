@@ -1,34 +1,42 @@
 package impl
 
 import (
+	"crypto/ecdsa"
+	"crypto/x509"
 	"errors"
+	"time"
+
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"time"
 )
 
 // Start implements peer.Service
 func (n *node) Start() error {
 	n.setOpen(true)
-	z.Logger.Info().Msgf("[%s] Starting peer", n.GetAddress())
+	// z.Logger.Info().Msgf("[%s] Starting peer", n.GetAddress())
 
 	n.RegisterHandlers()
 
-	go n.Listen()
+	go func() {
+		n.Listen()
+		// z.Logger.Info().Msgf("[%s] done with listening to you guys", n.GetAddress())
+	}()
 
 	go n.antiEntropyMechanism()
 
 	go n.heartbeatMechanism()
+
+	go n.runProofMaintenance()
 
 	return nil
 }
 
 // Stop implements peer.Service
 func (n *node) Stop() error {
-	z.Logger.Info().Msgf("[%s] Stopping peer", n.GetAddress())
+	// z.Logger.Info().Msgf("[%s] Stopping peer", n.GetAddress())
 	if !n.isOpen() {
 		return xerrors.Errorf("peer %s is already closed", n.GetAddress())
 	}
@@ -78,6 +86,7 @@ func (n *node) Listen() {
 			return
 		}
 
+		// z.Logger.Info().Msgf("[%s] LIVE finna try and receive a packet", n.GetAddress())
 		pkt, err := n.conf.Socket.Recv(time.Second * 1)
 		if err != nil {
 			if errors.Is(err, transport.TimeoutError(0)) {
@@ -96,8 +105,12 @@ func (n *node) Listen() {
 
 func (n *node) HandlePacket(pkt transport.Packet) error {
 	dest := pkt.Header.Destination
+	// z.Logger.Info().Msgf("[%s] there's a packet here...", n.GetAddress())
 	if dest == n.GetAddress() {
-		return n.conf.MessageRegistry.ProcessPacket(pkt)
+		// z.Logger.Info().Msgf("[%s] LIVE finna process this packet", n.GetAddress())
+		err := n.conf.MessageRegistry.ProcessPacket(pkt)
+		// z.Logger.Info().Msgf("[%s] LIVE exited ProcessPacket", n.GetAddress())
+		return err
 	}
 
 	//relay packet
@@ -120,7 +133,7 @@ func (n *node) antiEntropyMechanism() {
 
 		neighbor := n.GetRandomNeighbor("")
 		if neighbor == "" {
-			z.Logger.Debug().Msgf("[%s] no neighbor found (anti-entropy mechanism)", n.GetAddress())
+			// z.Logger.Debug().Msgf("[%s] no neighbor found (anti-entropy mechanism)", n.GetAddress())
 		} else {
 			statusTransportMessage, err := types.ToTransport(n.view.Copy())
 			if err != nil {
@@ -128,7 +141,7 @@ func (n *node) antiEntropyMechanism() {
 			}
 
 			_, err = n.SendTo(neighbor, statusTransportMessage)
-			z.Logger.Debug().Msgf("[%s] send status message to %s (anti-entropy mechanism)", n.GetAddress(), neighbor)
+			// z.Logger.Debug().Msgf("[%s] send status message to %s (anti-entropy mechanism)", n.GetAddress(), neighbor)
 			if err != nil {
 				z.Logger.Err(err).Msgf("[%s] failed to send status message to %s", n.GetAddress(), neighbor)
 			}
@@ -153,12 +166,44 @@ func (n *node) heartbeatMechanism() {
 		}
 
 		err = n.Broadcast(emptyTransportMessage)
-		z.Logger.Debug().Msgf("[%s] send empty message (heartbeat mechanism)", n.GetAddress())
+		// z.Logger.Debug().Msgf("[%s] send empty message (heartbeat mechanism)", n.GetAddress())
 		if err != nil {
 			z.Logger.Err(err).Msgf("[%s] failed to broadcast empty message (hearthbeat mechansim)", n.GetAddress())
 		}
 
 		time.Sleep(n.conf.HeartbeatInterval)
+	}
+}
+
+// Updates the proof store periodically, providing values for proof of work (used in the VoteMessage to restrict the number of sybil identities)
+func (n *node) runProofMaintenance() {
+	keysRaw := []ecdsa.PublicKey{
+		n.recommender.key.PublicKey,
+	}
+
+	// Translate the keys to strings as we only need their values (not cryptographic utility), and strings are easier to work with
+	keys := make([]string, 0)
+	for _, raw := range keysRaw {
+		bytes, err := x509.MarshalPKIXPublicKey(&raw)
+		if err != nil {
+			z.Logger.Err(err).Msgf("[%s] failed to translate public key to string (proof maintenance mechansim)", n.GetAddress())
+			continue
+		}
+
+		key := string(bytes)
+		keys = append(keys, key)
+	}
+
+	// Periodically check if any proof needs to be calculated
+	// Happens only at the start of the week or node setup, the check isn't complex, so checking from time to time isn't bad
+	for {
+		if !n.isOpen() {
+			return
+		}
+
+		n.proofMaintenanceLoop(keys)
+
+		time.Sleep(1 * time.Hour)
 	}
 }
 

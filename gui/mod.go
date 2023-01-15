@@ -129,6 +129,46 @@ func main() {
 						Usage: "Retry value for the backoff strategy",
 						Value: 5,
 					},
+					&urfave.UintFlag{
+						Name:  "recommendationsetsize",
+						Usage: "Number of articles in the recommendation feed",
+						Value: 5,
+					},
+					&urfave.Float64Flag{
+						Name:  "positivefactor",
+						Usage: "Factor value for dsybil non-overwhelming good object",
+						Value: 2.0,
+					},
+					&urfave.Float64Flag{
+						Name:  "negativefactor",
+						Usage: "Factor value for dsybil bad object",
+						Value: 2.0,
+					},
+					&urfave.Float64Flag{
+						Name:  "initialscore",
+						Usage: "Initial score value for dsybil assigned at first non-overwhelming good object of voter",
+						Value: 2.0,
+					},
+					&urfave.Float64Flag{
+						Name:  "overwhelmingthreshold",
+						Usage: "Threshold for when a dsybil object is considered overwhelming",
+						Value: 10.0,
+					},
+					&urfave.DurationFlag{
+						Name:  "votetimeout",
+						Usage: "Duration after article creation during which votes are recorded",
+						Value: time.Hour * 24 * 7 * 2,
+					},
+					&urfave.UintFlag{
+						Name:  "checkProofThreshold",
+						Usage: "The number of votes for an article after which proof of work is required",
+						Value: 1000,
+					},
+					&urfave.UintFlag{
+						Name:  "proofDifficulty",
+						Usage: "The number of zeroes required at the end of the proof of work hash",
+						Value: 24,
+					},
 				},
 				Action: start,
 			},
@@ -195,6 +235,15 @@ func start(c *urfave.Context) error {
 			Retry:   c.Uint("backoffretry"),
 		},
 		Storage: storage,
+
+		RecommendationSetSize: c.Uint("recommendationsetsize"),
+		PositiveFactor:        c.Float64("positivefactor"),
+		NegativeFactor:        c.Float64("negativefactor"),
+		InitialScore:          c.Float64("initialscore"),
+		OverwhelmingThreshold: c.Float64("overwhelmingthreshold"),
+		VoteTimeout:           c.Duration("votetimeout"),
+		CheckProofThreshold:   c.Uint("checkProofThreshold"),
+		ProofDifficulty:       c.Uint("proofDifficulty"),
 	}
 
 	node := peerFactory(conf)

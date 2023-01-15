@@ -2,6 +2,7 @@ package impl
 
 import (
 	"crypto/rsa"
+	"crypto/x509"
 	"io"
 	"math"
 	"regexp"
@@ -104,11 +105,30 @@ func (n *node) Comment(comment, articleID string) error {
 }
 
 func (n *node) Vote(articleID string) error {
+	pub := n.recommender.key.PublicKey
+	bytes := x509.MarshalPKCS1PublicKey(&pub)
+
+	// z.Logger.Info().Msgf("[%s] generating proof of work for VoteMessage", n.GetAddress())
+	prevStamp, thisStamp := n.getThisAndPreviousWeekStamps(time.Now())
+	proof, ok := n.proofStore.Get(string(bytes), uint(thisStamp))
+	// z.Logger.Info().Msgf("[%s] proof of work 1: %v", n.GetAddress(), ok)
+	if !ok {
+		proof, ok = n.proofStore.Get(string(bytes), uint(prevStamp))
+		// z.Logger.Info().Msgf("[%s] proof of work 2: %v", n.GetAddress(), ok)
+	}
+
 	voteMessage := types.VoteMessage{
 		ArticleID: articleID,
-		UserID:    n.GetAddress(),
 		Timestamp: time.Now(),
+		Proof:     proof,
+		PublicKey: bytes,
 	}
+
+	bytes, err := voteMessage.Sign(n.recommender.key)
+	if err != nil {
+		return xerrors.Errorf("failed to sign vote message: %v", err)
+	}
+	voteMessage.Signature = bytes
 
 	voteTransportMessage, err := types.ToTransport(voteMessage)
 	if err != nil {
@@ -122,6 +142,31 @@ func (n *node) GetSummary(articleID string) types.ArticleSummaryMessage {
 	return n.summaryStore.Get(articleID)
 }
 
+func (n *node) GetVoteStore() any {
+	return n.voteStore
+}
+
 func (n *node) AddPublicKey(pk rsa.PublicKey, userID string) {
 	n.pkMap[userID] = pk
+}
+
+func (n *node) Like(articleID string) error {
+	n.recommender.Like(articleID)
+	return n.Vote(articleID)
+}
+
+func (n *node) Dislike(articleID string) {
+	n.recommender.Dislike(articleID)
+}
+
+func (n *node) GetRecommendations() []string {
+	return n.recommender.GetRecommendations()
+}
+
+func (n *node) RefreshRecommendations() uint {
+	return n.recommender.RefreshRecommendations()
+}
+
+func (n *node) MarkAsRead(articleID string) {
+	n.recommender.MarkAsConsumed(articleID)
 }

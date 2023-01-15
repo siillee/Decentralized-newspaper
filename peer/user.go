@@ -2,8 +2,9 @@ package peer
 
 import (
 	"crypto/rsa"
-	"go.dedis.ch/cs438/types"
 	"io"
+
+	"go.dedis.ch/cs438/types"
 )
 
 type User interface {
@@ -17,5 +18,17 @@ type User interface {
 
 	GetSummary(articleID string) types.ArticleSummaryMessage
 
+	GetVoteStore() any // Used for testing
+
 	AddPublicKey(pk rsa.PublicKey, userID string)
+
+	Like(articleID string) error
+
+	Dislike(articleID string)
+
+	GetRecommendations() []string
+
+	RefreshRecommendations() uint
+
+	MarkAsRead(articleID string)
 }

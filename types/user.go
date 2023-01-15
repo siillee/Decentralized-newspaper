@@ -122,7 +122,7 @@ func (v VoteMessage) Name() string {
 func (v VoteMessage) String() string {
 	out := new(strings.Builder)
 
-	fmt.Fprintf(out, "(%s : %s) @ %s \n", v.ArticleID, v.UserID, v.Timestamp.Format(TimeFormat))
+	fmt.Fprintf(out, "(%s : %s) @ %s \n", v.ArticleID, v.PublicKey, v.Timestamp.Format(TimeFormat))
 
 	return out.String()
 }
@@ -135,8 +135,8 @@ func (v VoteMessage) HTML() string {
 func (v VoteMessage) Hash() []byte {
 	h := crypto.SHA256.New()
 	h.Write([]byte(v.ArticleID))
-	h.Write([]byte(v.UserID))
 	h.Write([]byte(v.Timestamp.Format(TimeFormat)))
+	h.Write([]byte(fmt.Sprint(v.Proof)))
 	return h.Sum(nil)
 }
 
