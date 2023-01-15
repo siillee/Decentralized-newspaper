@@ -149,6 +149,8 @@ type configTemplate struct {
 	initialScore          float64
 	overwhelmingThreshold float64
 	voteTimeout           time.Duration
+	checkProofThreshold   uint
+	proofDifficulty       uint
 }
 
 func newConfigTemplate() configTemplate {
@@ -183,6 +185,8 @@ func newConfigTemplate() configTemplate {
 		initialScore:          2.0,
 		overwhelmingThreshold: 10.0,
 		voteTimeout:           time.Hour * 24 * 7 * 2,
+		checkProofThreshold:   1000,
+		proofDifficulty:       24,
 	}
 }
 
@@ -313,6 +317,20 @@ func WithVoteTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithCheckProofThreshold sets a specific dsybil proof of work check threshold.
+func WithCheckProofThreshold(threshold uint) Option {
+	return func(ct *configTemplate) {
+		ct.checkProofThreshold = threshold
+	}
+}
+
+// WithProofDifficulty sets a specific dsybil proof of work difficulty.
+func WithProofDifficulty(difficulty uint) Option {
+	return func(ct *configTemplate) {
+		ct.proofDifficulty = difficulty
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -343,6 +361,8 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.InitialScore = template.initialScore
 	config.OverwhelmingThreshold = template.overwhelmingThreshold
 	config.VoteTimeout = template.voteTimeout
+	config.CheckProofThreshold = template.checkProofThreshold
+	config.ProofDifficulty = template.proofDifficulty
 
 	node := f(config)
 

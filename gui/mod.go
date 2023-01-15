@@ -159,6 +159,16 @@ func main() {
 						Usage: "Duration after article creation during which votes are recorded",
 						Value: time.Hour * 24 * 7 * 2,
 					},
+					&urfave.UintFlag{
+						Name:  "checkProofThreshold",
+						Usage: "The number of votes for an article after which proof of work is required",
+						Value: 1000,
+					},
+					&urfave.UintFlag{
+						Name:  "proofDifficulty",
+						Usage: "The number of zeroes required at the end of the proof of work hash",
+						Value: 24,
+					},
 				},
 				Action: start,
 			},
@@ -232,6 +242,8 @@ func start(c *urfave.Context) error {
 		InitialScore:          c.Float64("initialscore"),
 		OverwhelmingThreshold: c.Float64("overwhelmingthreshold"),
 		VoteTimeout:           c.Duration("votetimeout"),
+		CheckProofThreshold:   c.Uint("checkProofThreshold"),
+		ProofDifficulty:       c.Uint("proofDifficulty"),
 	}
 
 	node := peerFactory(conf)

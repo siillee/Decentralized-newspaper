@@ -16,9 +16,10 @@ func NewVoteStore() VoteStore {
 }
 
 type ArticleVoteStore struct {
-	timestamp time.Time
-	valid     bool
-	votes     map[string]time.Time // set of user IDs (or aliases) (avoid duplicates)
+	from  time.Time
+	until time.Time
+	valid bool
+	votes map[string]time.Time // set of user IDs (or aliases) (avoid duplicates)
 }
 
 type SafeVoteStore struct {
@@ -29,36 +30,52 @@ type SafeVoteStore struct {
 func (sf *SafeVoteStore) add(vote types.VoteMessage) {
 	sf.Lock()
 	defer sf.Unlock()
+
 	articleVoteStore, ok := sf.votes[vote.ArticleID]
 	if ok {
-		// Only record vote if voteTimeout is zero or if vote timestamp is before the voteTimeout
-		if articleVoteStore.timestamp.IsZero() || vote.Timestamp.Before(articleVoteStore.timestamp) {
+		// Only record vote if it has been made after the article has been made, but before the voting timeout (or if voting timeout is zero)
+		if vote.Timestamp.After(articleVoteStore.from) && (articleVoteStore.until.IsZero() || vote.Timestamp.Before(articleVoteStore.until)) {
 			articleVoteStore.votes[string(vote.PublicKey)] = vote.Timestamp
 		}
 	} else {
 		sf.votes[vote.ArticleID] = ArticleVoteStore{
-			timestamp: time.Time{}, // the zero value
-			valid:     false,
-			votes:     make(map[string]time.Time),
+			from:  time.Time{}, // the zero value
+			until: time.Time{}, // the zero value
+			valid: false,
+			votes: make(map[string]time.Time),
 		}
 		sf.votes[vote.ArticleID].votes[string(vote.PublicKey)] = vote.Timestamp
 	}
 }
 
-func (sf *SafeVoteStore) register(articleID string, voteTimeout time.Time) {
+func (sf *SafeVoteStore) register(articleID string, voteFrom time.Time, voteUntil time.Time) {
 	sf.Lock()
 	defer sf.Unlock()
 	articleVoteStore, ok := sf.votes[articleID]
 	if ok {
-		articleVoteStore.timestamp = voteTimeout
+		articleVoteStore.from = voteFrom
+		articleVoteStore.until = voteUntil
 		articleVoteStore.valid = true
 
-		if !voteTimeout.IsZero() {
-			// Trim votes that have not been made before the voteTimeout
+		// Filter out early votes (spam)
+		{
 			validVotes := make(map[string]time.Time)
 
 			for voteKey, voteTimestamp := range articleVoteStore.votes {
-				if voteTimestamp.Before(voteTimeout) {
+				if voteTimestamp.After(voteFrom) {
+					validVotes[voteKey] = voteTimestamp
+				}
+			}
+			articleVoteStore.votes = validVotes
+		}
+
+		// Filter out late votes
+		if !voteUntil.IsZero() {
+			// Trim votes that have not been made before the voting timeout
+			validVotes := make(map[string]time.Time)
+
+			for voteKey, voteTimestamp := range articleVoteStore.votes {
+				if voteTimestamp.Before(voteUntil) {
 					validVotes[voteKey] = voteTimestamp
 				}
 			}
@@ -68,9 +85,10 @@ func (sf *SafeVoteStore) register(articleID string, voteTimeout time.Time) {
 		sf.votes[articleID] = articleVoteStore
 	} else {
 		sf.votes[articleID] = ArticleVoteStore{
-			timestamp: voteTimeout,
-			valid:     true,
-			votes:     make(map[string]time.Time),
+			from:  voteFrom,
+			until: voteUntil,
+			valid: true,
+			votes: make(map[string]time.Time),
 		}
 	}
 }
@@ -78,7 +96,13 @@ func (sf *SafeVoteStore) register(articleID string, voteTimeout time.Time) {
 func (sf *SafeVoteStore) get(key string) map[string]time.Time {
 	sf.Lock()
 	defer sf.Unlock()
-	return sf.votes[key].votes
+
+	copy := make(map[string]time.Time)
+	for k, v := range sf.votes[key].votes {
+		copy[k] = v
+	}
+
+	return copy
 }
 
 func (sf *SafeVoteStore) getArticles() []string {
@@ -101,8 +125,8 @@ func (vs *VoteStore) Add(vote types.VoteMessage) {
 	vs.store.add(vote)
 }
 
-func (vs *VoteStore) Register(articleID string, voteTimeout time.Time) {
-	vs.store.register(articleID, voteTimeout)
+func (vs *VoteStore) Register(articleID string, voteFrom time.Time, voteUntil time.Time) {
+	vs.store.register(articleID, voteFrom, voteUntil)
 }
 
 func (vs *VoteStore) Get(articleID string) []string {

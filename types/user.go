@@ -136,6 +136,7 @@ func (v VoteMessage) Hash() []byte {
 	h := crypto.SHA256.New()
 	h.Write([]byte(v.ArticleID))
 	h.Write([]byte(v.Timestamp.Format(TimeFormat)))
+	h.Write([]byte(fmt.Sprint(v.Proof)))
 	return h.Sum(nil)
 }
 

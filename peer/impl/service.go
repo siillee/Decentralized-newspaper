@@ -1,6 +1,8 @@
 package impl
 
 import (
+	"crypto/ecdsa"
+	"crypto/x509"
 	"errors"
 	"time"
 
@@ -26,6 +28,8 @@ func (n *node) Start() error {
 	go n.antiEntropyMechanism()
 
 	go n.heartbeatMechanism()
+
+	go n.runProofMaintenance()
 
 	return nil
 }
@@ -168,6 +172,38 @@ func (n *node) heartbeatMechanism() {
 		}
 
 		time.Sleep(n.conf.HeartbeatInterval)
+	}
+}
+
+// Updates the proof store periodically, providing values for proof of work (used in the VoteMessage to restrict the number of sybil identities)
+func (n *node) runProofMaintenance() {
+	keysRaw := []ecdsa.PublicKey{
+		n.recommender.key.PublicKey,
+	}
+
+	// Translate the keys to strings as we only need their values (not cryptographic utility), and strings are easier to work with
+	keys := make([]string, 0)
+	for _, raw := range keysRaw {
+		bytes, err := x509.MarshalPKIXPublicKey(&raw)
+		if err != nil {
+			z.Logger.Err(err).Msgf("[%s] failed to translate public key to string (proof maintenance mechansim)", n.GetAddress())
+			continue
+		}
+
+		key := string(bytes)
+		keys = append(keys, key)
+	}
+
+	// Periodically check if any proof needs to be calculated
+	// Happens only at the start of the week or node setup, the check isn't complex, so checking from time to time isn't bad
+	for {
+		if !n.isOpen() {
+			return
+		}
+
+		n.proofMaintenanceLoop(keys)
+
+		time.Sleep(1 * time.Hour)
 	}
 }
 

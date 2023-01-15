@@ -77,8 +77,9 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pubBytes,
 		Timestamp: time.Now(),
+		Proof:     0,
+		PublicKey: pubBytes,
 	}
 	signBytes, err := voteMessage.Sign(voteKeys)
 	require.NoError(t, err)
@@ -93,7 +94,7 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -135,8 +136,9 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pubBytes,
 		Timestamp: time.Now(),
+		Proof:     0,
+		PublicKey: pubBytes,
 	}
 	signBytes, err := voteMessage.Sign(voteKeys)
 	require.NoError(t, err)
@@ -157,7 +159,7 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -223,8 +225,9 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pubBytes,
 		Timestamp: time.Now(),
+		Proof:     0,
+		PublicKey: pubBytes,
 	}
 	signBytes, err := voteMessage.Sign(keys1)
 	require.NoError(t, err)
@@ -239,7 +242,7 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -310,8 +313,9 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub1Bytes,
 		Timestamp: moment2,
+		Proof:     0,
+		PublicKey: pub1Bytes,
 	}
 	sign1Bytes, err := voteMessage.Sign(vote1Keys)
 	require.NoError(t, err)
@@ -330,8 +334,9 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub2Bytes,
 		Timestamp: moment3,
+		Proof:     0,
+		PublicKey: pub2Bytes,
 	}
 	sign2Bytes, err := voteMessage.Sign(vote2Keys)
 	require.NoError(t, err)
@@ -346,7 +351,7 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -419,8 +424,9 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub1Bytes,
 		Timestamp: moment3,
+		Proof:     0,
+		PublicKey: pub1Bytes,
 	}
 	sign1Bytes, err := voteMessage.Sign(vote1Keys)
 	require.NoError(t, err)
@@ -439,8 +445,9 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub2Bytes,
 		Timestamp: moment2,
+		Proof:     0,
+		PublicKey: pub2Bytes,
 	}
 	sign2Bytes, err := voteMessage.Sign(vote2Keys)
 	require.NoError(t, err)
@@ -455,7 +462,7 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -501,8 +508,9 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub1Bytes,
 		Timestamp: moment3,
+		Proof:     0,
+		PublicKey: pub1Bytes,
 	}
 	sign1Bytes, err := voteMessage.Sign(vote1Keys)
 	require.NoError(t, err)
@@ -527,8 +535,9 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	require.NoError(t, err)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
-		PublicKey: pub2Bytes,
 		Timestamp: moment2,
+		Proof:     0,
+		PublicKey: pub2Bytes,
 	}
 	sign2Bytes, err := voteMessage.Sign(vote2Keys)
 	require.NoError(t, err)
@@ -543,7 +552,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -576,7 +585,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	voteStore, ok = node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -588,6 +597,190 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	voters = voteStore.Get(articles[0])
 	require.Len(t, voters, 1)
 	require.Contains(t, voters, string(pub2Bytes))
+}
+
+// Send an article summary, and then send a vote for it. Don't bother calculating the proof.
+// Vote should not be recorded because the proof was not provided.
+func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
+	transp := channel.NewTransport()
+
+	EC := elliptic.P256()
+
+	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	require.NoError(t, err)
+	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithCheckProofThreshold(0))
+	defer node1.Stop()
+
+	sock2, err := transp.CreateSocket("127.0.0.1:0")
+	require.NoError(t, err)
+	defer sock2.Close()
+
+	node1.AddPublicKey(keys2.PublicKey, sock2.GetAddress())
+
+	moment1 := time.Now()
+	moment2 := moment1.Add(10 * time.Second)
+
+	articleSummaryMessage := types.ArticleSummaryMessage{
+		ArticleID: "article 1",
+		UserID:    sock2.GetAddress(),
+		Title:     "article 1 title",
+		Metahash:  "meta hash 1",
+		Timestamp: moment1,
+	}
+	signature, err := articleSummaryMessage.Sign(keys2)
+	require.NoError(t, err)
+	articleSummaryMessage.Signature = signature
+	articleSummaryTransportMessage, err := types.ToTransport(articleSummaryMessage)
+	require.NoError(t, err)
+	header := transport.NewHeader(
+		sock2.GetAddress(), // source
+		sock2.GetAddress(), // relay
+		node1.GetAddr(),    // destination
+		0,                  // TTL
+	)
+	pkt := transport.Packet{
+		Header: &header,
+		Msg:    &articleSummaryTransportMessage,
+	}
+
+	err = sock2.Send(node1.GetAddr(), pkt, 0)
+	require.NoError(t, err)
+
+	pub1Bytes, err := x509.MarshalPKIXPublicKey(&vote1Keys.PublicKey)
+	require.NoError(t, err)
+	voteMessage := types.VoteMessage{
+		ArticleID: "article 1",
+		Timestamp: moment2,
+		Proof:     0,
+		PublicKey: pub1Bytes,
+	}
+	sign1Bytes, err := voteMessage.Sign(vote1Keys)
+	require.NoError(t, err)
+	voteMessage.Signature = sign1Bytes
+	voteTransportMessage, err := types.ToTransport(voteMessage)
+	require.NoError(t, err)
+	pkt = transport.Packet{
+		Header: &header,
+		Msg:    &voteTransportMessage,
+	}
+
+	err = sock2.Send(node1.GetAddr(), pkt, 0)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
+	require.True(t, ok)
+
+	articles := voteStore.GetArticles()
+	require.Len(t, articles, 1)
+	require.Equal(t, "article 1", articles[0])
+
+	voters := voteStore.Get(articles[0])
+	require.Len(t, voters, 0)
+}
+
+// Send an article summary, and then send a vote for it. Calculate the proof.
+// Vote should be recorded because a valid proof of work was provided.
+func Test_Sybil_Vote_Proof_Valid(t *testing.T) {
+	transp := channel.NewTransport()
+
+	EC := elliptic.P256()
+
+	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1),
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(4))
+	defer node1.Stop()
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2),
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(4))
+	defer node2.Stop()
+
+	node1.AddPeer(node2.GetAddr())
+	node2.AddPeer(node1.GetAddr())
+
+	node1.AddPublicKey(keys2.PublicKey, node2.GetAddr())
+	node2.AddPublicKey(keys1.PublicKey, node1.GetAddr())
+
+	articleID, err := node1.PublishArticle("article 1", bytes.NewBuffer([]byte("placeholder content")))
+	require.NoError(t, err)
+
+	err = node2.Like(articleID)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
+	require.True(t, ok)
+
+	articles := voteStore.GetArticles()
+	require.Len(t, articles, 1)
+
+	voters := voteStore.Get(articles[0])
+	require.Len(t, voters, 1)
+}
+
+// Send an article summary. Then keep sending votes for it until the vote is registered.
+// Meanwhile the other thread is calculating the proof.
+// Vote should be recorded once the proof is successfully calculated.
+// Test can be used to estimate the processing time for a specific difficulty.
+func Test_Sybil_Vote_Proof_Performance(t *testing.T) {
+	transp := channel.NewTransport()
+
+	EC := elliptic.P256()
+
+	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	require.NoError(t, err)
+
+	difficulty := 18
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1),
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(uint(difficulty)))
+	defer node1.Stop()
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2),
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(uint(difficulty)))
+	defer node2.Stop()
+
+	node1.AddPeer(node2.GetAddr())
+	node2.AddPeer(node1.GetAddr())
+
+	node1.AddPublicKey(keys2.PublicKey, node2.GetAddr())
+	node2.AddPublicKey(keys1.PublicKey, node1.GetAddr())
+
+	articleID, err := node1.PublishArticle("article 1", bytes.NewBuffer([]byte("placeholder content")))
+	require.NoError(t, err)
+
+	notReceived := true
+	for notReceived {
+		time.Sleep(45 * time.Millisecond)
+
+		err = node2.Like(articleID)
+		require.NoError(t, err)
+
+		time.Sleep(5 * time.Millisecond)
+
+		voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
+		require.True(t, ok)
+
+		articles := voteStore.GetArticles()
+		require.Len(t, articles, 1)
+
+		voters := voteStore.Get(articles[0])
+		if len(voters) == 1 {
+			notReceived = false
+		} else {
+			require.Len(t, voters, 0)
+		}
+	}
 }
 
 // Two nodes. Some articles are published. Node 1 likes two articles. Node 2 likes the first article node 1 liked.
@@ -607,8 +800,6 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 
 	node1.AddPeer(node2.GetAddr())
 	node2.AddPeer(node1.GetAddr())
-
-	time.Sleep(2 * time.Second)
 
 	type articleObj struct {
 		title   string
@@ -647,6 +838,8 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 		articles[i] = art
 	}
 
+	time.Sleep(500 * time.Millisecond)
+
 	goodArticleIndexes := []int{1, 3}
 	goodArticleIDs := make([]string, 0)
 
@@ -667,7 +860,7 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 		goodArticleIDs = append(goodArticleIDs, art.id)
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	err := node2.Like(goodArticleIDs[0])
 	require.NoError(t, err)
@@ -699,8 +892,6 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 
 	node1.AddPeer(node2.GetAddr())
 	node2.AddPeer(node1.GetAddr())
-
-	time.Sleep(2 * time.Second)
 
 	type articleObj struct {
 		title   string
@@ -774,8 +965,9 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 		require.NoError(t, err)
 		voteMessage := types.VoteMessage{
 			ArticleID: articles[badArticleIndex].id,
-			PublicKey: pubBytes,
 			Timestamp: time.Now(),
+			Proof:     0,
+			PublicKey: pubBytes,
 		}
 		signBytes, err := voteMessage.Sign(keys)
 		require.NoError(t, err)
@@ -797,7 +989,7 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(2 * time.Second)
 
 	voteStore, ok := node2.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -922,8 +1114,9 @@ func Test_Sybil_Scenario(t *testing.T) {
 	botVoteFun := func(articleID string, publicKey []byte, privateKey *ecdsa.PrivateKey) {
 		voteMessage := types.VoteMessage{
 			ArticleID: articleID,
-			PublicKey: publicKey,
 			Timestamp: time.Now(),
+			Proof:     0,
+			PublicKey: publicKey,
 		}
 		signBytes, err := voteMessage.Sign(privateKey)
 		require.NoError(t, err)

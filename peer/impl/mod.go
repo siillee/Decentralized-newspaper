@@ -26,6 +26,8 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	summaryStore := concurrent.NewSummaryStore()
 	voteStore := concurrent.NewVoteStore()
 	commentStore := concurrent.NewCommentStore()
+	proofStore := concurrent.NewProofStore()
+	seedStore := concurrent.NewSeedStore()
 	ackChannels := concurrent.NewAckChannels()
 
 	// the peer's routing table should contain one element, the peer’s address and relay to itself
@@ -51,6 +53,8 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 		rumorsStore:           rumorsStore,
 		summaryStore:          summaryStore,
 		commentStore:          commentStore,
+		proofStore:            proofStore,
+		seedStore:             seedStore,
 		voteStore:             voteStore,
 		catalog:               catalog,
 		pkMap:                 pkMap,
@@ -78,6 +82,8 @@ type node struct {
 	summaryStore          concurrent.SummaryStore
 	voteStore             concurrent.VoteStore
 	commentStore          concurrent.CommentStore
+	proofStore            concurrent.ProofStore
+	seedStore             concurrent.SeedStore
 	catalog               peer.Catalog
 	requestManager        request.Manager
 	pkMap                 map[string]ecdsa.PublicKey
@@ -557,7 +563,7 @@ func (n *node) ExecArticleSummaryMessage(msg types.Message, pkt transport.Packet
 	if n.conf.VoteTimeout != 0 {
 		timeout = articleSummaryMessage.Timestamp.Add(n.conf.VoteTimeout)
 	}
-	n.voteStore.Register(articleSummaryMessage.ArticleID, timeout)
+	n.voteStore.Register(articleSummaryMessage.ArticleID, articleSummaryMessage.Timestamp, timeout)
 
 	// TODO: download this file with probability p
 
@@ -602,9 +608,23 @@ func (n *node) ExecVoteMessage(msg types.Message, pkt transport.Packet) error {
 	}
 
 	// Don't count your own votes
-	if !pub.Equal(n.recommender.key.PublicKey) {
-		n.voteStore.Add(*voteMessage)
+	if pub.Equal(n.recommender.key.PublicKey) {
+		return nil
 	}
+
+	// Check proof, if vote threshold reached
+	articleID := voteMessage.ArticleID
+	if uint(len(n.voteStore.Get(articleID))) >= n.conf.CheckProofThreshold {
+		// z.Logger.Info().Msgf("[%s] vote message received: proof of work required", n.GetAddress())
+		validProof := n.verifyProof(string(voteMessage.PublicKey), voteMessage.Timestamp, voteMessage.Proof)
+		if !validProof {
+			// z.Logger.Info().Msgf("[%s] vote message received: proof of work missing/invalid", n.GetAddress())
+			// ignore vote since it doesn't have the required proof of work
+			return nil
+		}
+	}
+
+	n.voteStore.Add(*voteMessage)
 
 	return nil
 }

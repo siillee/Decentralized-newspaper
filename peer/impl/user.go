@@ -111,10 +111,20 @@ func (n *node) Vote(articleID string) error {
 		return xerrors.Errorf("failed to marshal vote publick key: %v", err)
 	}
 
+	// z.Logger.Info().Msgf("[%s] generating proof of work for VoteMessage", n.GetAddress())
+	prevStamp, thisStamp := n.getThisAndPreviousWeekStamps(time.Now())
+	proof, ok := n.proofStore.Get(string(bytes), uint(thisStamp))
+	// z.Logger.Info().Msgf("[%s] proof of work 1: %v", n.GetAddress(), ok)
+	if !ok {
+		proof, ok = n.proofStore.Get(string(bytes), uint(prevStamp))
+		// z.Logger.Info().Msgf("[%s] proof of work 2: %v", n.GetAddress(), ok)
+	}
+
 	voteMessage := types.VoteMessage{
 		ArticleID: articleID,
-		PublicKey: bytes,
 		Timestamp: time.Now(),
+		Proof:     proof,
+		PublicKey: bytes,
 	}
 
 	bytes, err = voteMessage.Sign(n.recommender.key)

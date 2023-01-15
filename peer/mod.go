@@ -87,6 +87,13 @@ type Configuration struct {
 	// Duration after article creation during which votes are recorded.
 	// Default: 2 weeks
 	VoteTimeout time.Duration
+	// The number of votes for an article after which proof of work is required.
+	// Default: 1000
+	CheckProofThreshold uint
+	// The number of zeroes required at the end of the proof of work hash.
+	// Increases the time complexity exponentially.
+	// Default: 24
+	ProofDifficulty uint
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must
