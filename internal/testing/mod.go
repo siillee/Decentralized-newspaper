@@ -5,6 +5,8 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"sync"
 
 	"math/rand"
 
@@ -151,6 +153,12 @@ type configTemplate struct {
 	voteTimeout           time.Duration
 	checkProofThreshold   uint
 	proofDifficulty       uint
+
+	dhParams peer.DHParameters
+
+	directoryNodes []string
+	dir            types.Directory
+	torEnabled     bool
 }
 
 func newConfigTemplate() configTemplate {
@@ -331,6 +339,41 @@ func WithProofDifficulty(difficulty uint) Option {
 	}
 }
 
+// WithDHParams sets DH parameters
+func WithDHParams(p, q, g *big.Int) Option {
+	return func(ct *configTemplate) {
+		ct.dhParams = peer.DHParameters{
+			P: p,
+			Q: q,
+			G: g,
+		}
+	}
+}
+
+// WithDirectoryNodes sets the known directory nodes
+func WithDirectoryNodes(nodes []string) Option {
+	return func(ct *configTemplate) {
+		ct.directoryNodes = nodes
+	}
+}
+
+// WithDirectory sets the directory of tor nodes
+func WithDirectory(torNodes []types.TorNode) Option {
+	return func(ct *configTemplate) {
+		ct.dir = types.Directory{Dir: make(map[string]*rsa.PublicKey), Mutex: &sync.Mutex{}}
+		for _, torNode := range torNodes {
+			ct.dir.Add(torNode.Ip, torNode.Pk)
+		}
+	}
+}
+
+// WithTor sets Tor to enabled(true) or disabled(false)
+func WithTor(enabled bool) Option {
+	return func(ct *configTemplate) {
+		ct.torEnabled = enabled
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -363,6 +406,10 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.VoteTimeout = template.voteTimeout
 	config.CheckProofThreshold = template.checkProofThreshold
 	config.ProofDifficulty = template.proofDifficulty
+	config.DH = template.dhParams
+	config.DirectoryNodes = template.directoryNodes
+	config.Directory = template.dir
+	config.TorEnabled = template.torEnabled
 
 	node := f(config)
 

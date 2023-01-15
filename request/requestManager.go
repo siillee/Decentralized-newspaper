@@ -1,12 +1,13 @@
 package request
 
 import (
+	"time"
+
 	"github.com/rs/xid"
 	z "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/types"
 	"golang.org/x/xerrors"
-	"time"
 )
 
 func NewRequestManager(node peer.Peer, conf peer.Backoff) Manager {

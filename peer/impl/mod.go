@@ -44,24 +44,33 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	recommender := NewRecommender(&conf, &voteStore)
 
 	n := &node{
-		conf:                  conf,
-		open:                  false,
-		routingTable:          routingTable,
-		currentSequenceNumber: 0,
-		view:                  view,
-		ackChannels:           ackChannels,
-		rumorsStore:           rumorsStore,
-		summaryStore:          summaryStore,
-		commentStore:          commentStore,
-		proofStore:            proofStore,
-		seedStore:             seedStore,
-		voteStore:             voteStore,
-		catalog:               catalog,
-		pkMap:                 pkMap,
-		recommender:           recommender,
+		conf:                           conf,
+		open:                           false,
+		routingTable:                   routingTable,
+		currentSequenceNumber:          0,
+		view:                           view,
+		ackChannels:                    ackChannels,
+		rumorsStore:                    rumorsStore,
+		summaryStore:                   summaryStore,
+		commentStore:                   commentStore,
+		proofStore:                     proofStore,
+		seedStore:                      seedStore,
+		voteStore:                      voteStore,
+		catalog:                        catalog,
+		pkMap:                          pkMap,
+		recommender:                    recommender,
+		directory:                      types.Directory{Dir: make(map[string]*rsa.PublicKey)},
+		proxyCircuits:                  types.ConcurrentProxyCircuits{ProxyCircuits: make(map[string]*types.ProxyCircuit)},
+		relayCircuits:                  types.ConcurrentRelayCircuits{RelayCircuits: make(map[string]*types.RelayCircuit)},
+		keyExchangeReplyChannels:       types.KeyExchangeReplyChannels{ChannelMap: make(map[string]chan types.KeyExchangeReplyMessage)},
+		anonymousDownloadReplyChannels: types.AnonymousDownloadReplyChannels{ChannelMap: make(map[string]chan types.AnonymousDownloadReplyMessage)},
 	}
 
 	n.requestManager = request.NewRequestManager(n, n.conf.BackoffDataRequest)
+
+	for _, dirNode := range n.conf.DirectoryNodes {
+		n.AddPeer(dirNode)
+	}
 
 	return n
 }
@@ -72,22 +81,27 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 type node struct {
 	peer.Peer
 	sync.Mutex
-	conf                  peer.Configuration
-	open                  bool
-	routingTable          concurrent.RoutingTable
-	currentSequenceNumber uint
-	view                  concurrent.View
-	ackChannels           concurrent.AckChannels
-	rumorsStore           concurrent.RumorsStore
-	summaryStore          concurrent.SummaryStore
-	voteStore             concurrent.VoteStore
-	commentStore          concurrent.CommentStore
-	proofStore            concurrent.ProofStore
-	seedStore             concurrent.SeedStore
-	catalog               peer.Catalog
-	requestManager        request.Manager
-	pkMap                 map[string]rsa.PublicKey
-	recommender           Recommender
+	conf                           peer.Configuration
+	open                           bool
+	routingTable                   concurrent.RoutingTable
+	currentSequenceNumber          uint
+	view                           concurrent.View
+	ackChannels                    concurrent.AckChannels
+	rumorsStore                    concurrent.RumorsStore
+	summaryStore                   concurrent.SummaryStore
+	voteStore                      concurrent.VoteStore
+	commentStore                   concurrent.CommentStore
+	proofStore                     concurrent.ProofStore
+	seedStore                      concurrent.SeedStore
+	catalog                        peer.Catalog
+	requestManager                 request.Manager
+	pkMap                          map[string]rsa.PublicKey
+	recommender                    Recommender
+	directory                      types.Directory
+	proxyCircuits                  types.ConcurrentProxyCircuits
+	relayCircuits                  types.ConcurrentRelayCircuits
+	keyExchangeReplyChannels       types.KeyExchangeReplyChannels
+	anonymousDownloadReplyChannels types.AnonymousDownloadReplyChannels
 }
 
 func (n *node) GetNeighbors(excluded string) []string {

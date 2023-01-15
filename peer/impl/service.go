@@ -59,6 +59,12 @@ func (n *node) RegisterHandlers() {
 		types.ArticleSummaryMessage{},
 		types.CommentMessage{},
 		types.VoteMessage{},
+		types.OnionMessage{},
+		types.KeyExchangeRequestMessage{},
+		types.KeyExchangeReplyMessage{},
+		types.AnonymousArticleSummaryMessage{},
+		types.AnonymousDownloadRequestMessage{},
+		types.AnonymousDownloadReplyMessage{},
 	}
 	handlers := []registry.Exec{
 		n.ExecChatMessage,
@@ -74,6 +80,12 @@ func (n *node) RegisterHandlers() {
 		n.ExecArticleSummaryMessage,
 		n.ExecCommentMessage,
 		n.ExecVoteMessage,
+		n.ExecOnionMessage,
+		n.ExecKeyExchangeRequestMessage,
+		n.ExecKeyExchangeReplyMessage,
+		n.ExecAnonymousArticleSummaryMessage,
+		n.ExecAnonymousDownloadRequestMessage,
+		n.ExecAnonymousDownloadReplyMessage,
 	}
 	for i, msgType := range handledTypes {
 		n.conf.MessageRegistry.RegisterMessageCallback(msgType, handlers[i])

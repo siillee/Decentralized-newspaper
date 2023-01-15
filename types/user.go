@@ -4,8 +4,9 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"fmt"
-	"go.dedis.ch/cs438/customCrypto"
 	"strings"
+
+	"go.dedis.ch/cs438/customCrypto"
 )
 
 const (

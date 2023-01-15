@@ -3,6 +3,7 @@ package peer
 import (
 	"crypto/rsa"
 	"io"
+	"math/big"
 
 	"go.dedis.ch/cs438/types"
 )
@@ -31,4 +32,8 @@ type User interface {
 	RefreshRecommendations() uint
 
 	MarkAsRead(articleID string)
+
+	EstablishKeyExchange(userID string) (big.Int, error)
+
+	GetSharedSecret(userID string) big.Int // for testing purpose
 }

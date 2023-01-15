@@ -1,6 +1,7 @@
 package impl
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
 	"io"
@@ -35,8 +36,17 @@ func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 		Timestamp: time.Now(),
 	}
 
-	isUsingTor := false //add signature only if not anonymous and if it has a privateKey
-	if !isUsingTor && n.conf.PrivateKey != nil {
+	if n.conf.TorEnabled {
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(content)
+
+		_ = n.Tag(title, metaHash)
+
+		return articleID, n.AnonymousPublishArticle(articleSummaryMessage, buf.String())
+	}
+
+	//add signature only if not anonymous and if it has a privateKey
+	if n.conf.PrivateKey != nil {
 		articleSummaryMessage.UserID = n.GetAddress()
 		signature, err := articleSummaryMessage.Sign(n.conf.PrivateKey)
 		if err != nil {
@@ -62,8 +72,13 @@ func (n *node) DownloadArticle(title, metahash string) ([]byte, error) {
 		return n.Download(metahash) //local download
 	}
 
+	if n.conf.TorEnabled {
+		return n.AnonymousDownloadArticle(title, metahash)
+	}
+
 	reg := *regexp.MustCompile(title)
 	responses, err := n.SearchAll(reg, 15, time.Millisecond*100) //update catalog
+
 	if err != nil {
 		return nil, err
 	}

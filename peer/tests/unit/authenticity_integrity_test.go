@@ -5,14 +5,15 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"testing"
+	"time"
+
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/transport/channel"
 	"go.dedis.ch/cs438/types"
-	"testing"
-	"time"
 )
 
 func Test_Authenticity_Integrity_Summary_Valid(t *testing.T) {
