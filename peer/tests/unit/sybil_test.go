@@ -38,7 +38,7 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -94,7 +94,7 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -123,7 +123,7 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -159,7 +159,7 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -186,7 +186,7 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -242,7 +242,7 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -270,7 +270,7 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(1000*time.Second))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(1000*time.Second), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -351,7 +351,7 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -381,7 +381,7 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -462,7 +462,7 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -491,7 +491,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -552,7 +552,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -585,7 +585,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok = node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -613,7 +613,7 @@ func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
 	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
 	require.NoError(t, err)
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithCheckProofThreshold(0))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithCheckProofThreshold(0), z.WithProofDifficulty(8))
 	defer node1.Stop()
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
@@ -672,7 +672,7 @@ func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -698,10 +698,10 @@ func Test_Sybil_Vote_Proof_Valid(t *testing.T) {
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1),
-		z.WithCheckProofThreshold(0), z.WithProofDifficulty(4))
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(8))
 	defer node1.Stop()
 	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys2),
-		z.WithCheckProofThreshold(0), z.WithProofDifficulty(4))
+		z.WithCheckProofThreshold(0), z.WithProofDifficulty(8))
 	defer node2.Stop()
 
 	node1.AddPeer(node2.GetAddr())
@@ -710,13 +710,15 @@ func Test_Sybil_Vote_Proof_Valid(t *testing.T) {
 	node1.AddPublicKey(keys2.PublicKey, node2.GetAddr())
 	node2.AddPublicKey(keys1.PublicKey, node1.GetAddr())
 
+	time.Sleep(1 * time.Second)
+
 	articleID, err := node1.PublishArticle("article 1", bytes.NewBuffer([]byte("placeholder content")))
 	require.NoError(t, err)
 
 	err = node2.Like(articleID)
 	require.NoError(t, err)
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	voteStore, ok := node1.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
@@ -790,12 +792,12 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
 		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
-		z.WithInitialScore(10))
+		z.WithInitialScore(10), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
 		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
-		z.WithInitialScore(10))
+		z.WithInitialScore(10), z.WithProofDifficulty(0))
 	defer node2.Stop()
 
 	node1.AddPeer(node2.GetAddr())
@@ -838,7 +840,7 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 		articles[i] = art
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	goodArticleIndexes := []int{1, 3}
 	goodArticleIDs := make([]string, 0)
@@ -860,7 +862,7 @@ func Test_Sybil_Recommended_After_One_Vote(t *testing.T) {
 		goodArticleIDs = append(goodArticleIDs, art.id)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	err := node2.Like(goodArticleIDs[0])
 	require.NoError(t, err)
@@ -882,12 +884,12 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
 		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
-		z.WithInitialScore(10))
+		z.WithInitialScore(10), z.WithProofDifficulty(0))
 	defer node1.Stop()
 
 	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
 		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1), z.WithOverwhelmingThreshold(10),
-		z.WithInitialScore(10))
+		z.WithInitialScore(10), z.WithProofDifficulty(0))
 	defer node2.Stop()
 
 	node1.AddPeer(node2.GetAddr())
@@ -1033,7 +1035,8 @@ func Test_Sybil_Scenario(t *testing.T) {
 
 	node := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithHeartbeat(time.Second*200),
 		z.WithAntiEntropy(time.Second*5), z.WithRecommendationSetSize(1),
-		z.WithOverwhelmingThreshold(100.0), z.WithInitialScore(10.0), z.WithPositiveFactor(16.0), z.WithNegativeFactor(1_048_576.0))
+		z.WithOverwhelmingThreshold(100.0), z.WithInitialScore(10.0), z.WithPositiveFactor(16.0), z.WithNegativeFactor(1_048_576.0),
+		z.WithCheckProofThreshold(1_000_000), z.WithProofDifficulty(4))
 	defer node.Stop()
 
 	numOfGoodArticles := 500
@@ -1126,6 +1129,9 @@ func Test_Sybil_Scenario(t *testing.T) {
 
 	simulateVotingPattern := func(numOfBots int, goodChance float64, badChance float64) {
 		for i := 0; i < numOfBots; i++ {
+			if i%100 == 0 {
+				log.Logger.Info().Msgf("ping from simulateVotingPattern...")
+			}
 			keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
 			require.NoError(t, err)
 
@@ -1180,6 +1186,7 @@ func Test_Sybil_Scenario(t *testing.T) {
 	}
 
 	// Simulate new user's experience using the feed
+	log.Logger.Info().Msgf("starting user experience simulation...")
 	goodRecs := 0
 	badRecs := 0
 	for i := 0; i < feedCycles; i++ {

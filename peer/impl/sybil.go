@@ -10,6 +10,9 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/piquette/finance-go/chart"
+	"github.com/piquette/finance-go/datetime"
+	log "go.dedis.ch/cs438/logger"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl/concurrent"
 )
@@ -42,7 +45,7 @@ type Recommender struct {
 	consumed map[string]bool
 	// Article id array of currently recommended articles
 	current []string
-	// Key?
+	// Key used for VoteMessage message types (to preserve anonymity)
 	key *ecdsa.PrivateKey
 }
 
@@ -165,12 +168,8 @@ func (r *Recommender) pickArticle() (uint, string) {
 
 	options := overwhelmingArticles
 	if len(overwhelmingArticles) == 0 {
-		// log.Logger.Info().Msgf("choosing from non-overwhelming articles")
 		options = nonOverwhelmingArticles
 	}
-	// else {
-	// 	log.Logger.Info().Msgf("choosing from overwhelming articles")
-	// }
 
 	selected := options[rand.Intn(len(options))]
 	r.MarkAsConsumed(selected)
@@ -179,7 +178,6 @@ func (r *Recommender) pickArticle() (uint, string) {
 }
 
 func (n *node) proofMaintenanceLoop(keys []string) {
-	// log.Logger.Info().Msgf("[%s] proofMaintenanceLoop", n.GetAddress())
 	_, yearAndWeek := n.getThisAndPreviousWeekStamps(time.Now())
 
 	shouldUpdate := n.checkIfProofsAreNeeded(keys, yearAndWeek)
@@ -190,11 +188,9 @@ func (n *node) proofMaintenanceLoop(keys []string) {
 }
 
 func (n *node) checkIfProofsAreNeeded(keys []string, weekstamp int) bool {
-	// log.Logger.Info().Msgf("[%s] checkIfProofsAreNeeded", n.GetAddress())
 	for _, key := range keys {
 		_, ok := n.proofStore.Get(key, uint(weekstamp))
 		if !ok {
-			// log.Logger.Info().Msgf("[%s] proof missing for %v", n.GetAddress(), weekstamp)
 			return true
 		}
 	}
@@ -203,18 +199,18 @@ func (n *node) checkIfProofsAreNeeded(keys []string, weekstamp int) bool {
 }
 
 func (n *node) proofUpdateLoop(keys []string, weekstamp int) {
-	// log.Logger.Info().Msgf("[%s] proofUpdateLoop", n.GetAddress())
-	seed := n.fetchUniversalRandomSeed(weekstamp)
+	seed, ok := n.fetchUniversalRandomSeed(weekstamp)
+	if !ok {
+		return
+	}
 
 	for _, key := range keys {
 		_, ok := n.proofStore.Get(key, uint(weekstamp))
 		if ok {
-			// log.Logger.Info().Msgf("[%s] proof already calculated for %v", n.GetAddress(), weekstamp)
 			continue
 		}
 
 		proof := n.proofCalculateInstance(key, seed)
-		// log.Logger.Info().Msgf("[%s] calculated proof %v for date %v with %v zeroes", n.GetAddress(), proof, weekstamp, n.conf.ProofDifficulty)
 		n.proofStore.Add(key, uint(weekstamp), proof)
 	}
 }
@@ -229,21 +225,72 @@ func (n *node) getThisAndPreviousWeekStamps(timestamp time.Time) (int, int) {
 	return prevWeekStamp, thisWeekStamp
 }
 
-func (n *node) fetchUniversalRandomSeed(weekstamp int) float64 {
-	// TODO: perform api call to get some stock closing price or something like that
+func (n *node) fetchUniversalRandomSeed(weekstamp int) (float64, bool) {
+	// Return from seed store if seed was used before
 	seed, ok := n.seedStore.Get(weekstamp)
 	if ok {
-		return seed
+		return seed, true
 	}
 
-	seed = 7 // TODO: replace the "7" with api call
+	// Set up api call to get MSFT closing price for Friday before week from weekstamp
+	friday := n.getLastFridayFromWeekStamp(weekstamp)
+	saturday := friday.AddDate(0, 0, 1)
+	params := &chart.Params{
+		Symbol:   "MSFT",
+		Start:    datetime.FromUnix(int(friday.Unix())),
+		End:      datetime.FromUnix(int(saturday.Unix())),
+		Interval: datetime.OneDay,
+	}
+
+	// Make api call
+	iter := chart.Get(params)
+
+	// Extract the closing price from the response
+	iter.Next()
+	seed = iter.Bar().Close.InexactFloat64()
+
+	// Check for errors
+	err := iter.Err()
+	if err != nil {
+		log.Logger.Err(err).Msgf("[%s] failed fetching random seed from stock market", n.GetAddress())
+		return 0, false
+	}
+
+	// Remember seed for future usage
 	n.seedStore.Add(weekstamp, seed)
 
-	return seed
+	return seed, true
+}
+
+func (n *node) getLastFridayFromWeekStamp(weekstamp int) time.Time {
+	year := weekstamp / 100
+	week := weekstamp % 100
+
+	// Jump to a day in the ISO year/week combination
+	curr := time.Date(year, 0, 0, 0, 0, 0, 0, time.UTC)
+	currYear, currWeek := curr.ISOWeek()
+	for currYear < year || (currYear == year && currWeek < week) {
+		curr = curr.AddDate(0, 0, 7)
+		currYear, currWeek = curr.ISOWeek()
+	}
+	for currYear > year || (currYear == year && currWeek > week) {
+		curr = curr.AddDate(0, 0, -7)
+		currYear, currWeek = curr.ISOWeek()
+	}
+
+	// Jump to the Monday of that week
+	for curr.Weekday() != time.Monday {
+		curr = curr.AddDate(0, 0, -1)
+	}
+
+	// Jump to the Friday of last week
+	curr = curr.AddDate(0, 0, -3)
+
+	// log.Logger.Info().Msgf("[%s] got date %v/%v/%v from weekstamp %v", n.GetAddress(), curr.Day(), curr.Month(), curr.Year(), weekstamp)
+	return curr
 }
 
 func (n *node) proofCalculateInstance(key string, seed float64) uint {
-	// log.Logger.Info().Msgf("[%s] proofCalculateInstance", n.GetAddress())
 	h := crypto.SHA256.New()
 	proof := uint(0)
 
@@ -254,6 +301,13 @@ func (n *node) proofCalculateInstance(key string, seed float64) uint {
 		}
 
 		proof++
+
+		// This task might be long, check if node is still running
+		if proof%1_000_000 == 0 {
+			if !n.isOpen() {
+				return 0
+			}
+		}
 	}
 }
 
@@ -265,7 +319,12 @@ func (n *node) verifyProof(key string, timestamp time.Time, proof uint) bool {
 
 	seeds := make([]float64, len(weekstamps))
 	for i, weekstamp := range weekstamps {
-		seeds[i] = n.fetchUniversalRandomSeed(weekstamp)
+		seed, ok := n.fetchUniversalRandomSeed(weekstamp)
+		if !ok {
+			return false
+		}
+
+		seeds[i] = seed
 	}
 
 	for _, seed := range seeds {
@@ -285,13 +344,11 @@ func (n *node) checkProof(h hash.Hash, key string, seed float64, proof uint) boo
 
 	zeroesLeft := n.conf.ProofDifficulty
 	numberOfBytes := (zeroesLeft + 7) / 8
-	// log.Logger.Info().Msgf("[%s] number of bytes is %v for %v zeroes", n.GetAddress(), numberOfBytes, zeroesLeft)
 	for i := uint(0); i < numberOfBytes; i++ {
 		index := uint(len(attempt)) - 1 - i
 		b := attempt[index]
 
 		if zeroesLeft >= 8 {
-			// log.Logger.Info().Msgf("[%s] check the whole byte is 0", n.GetAddress())
 			// All bits have to be zero
 			if b != 0 {
 				return false
@@ -299,30 +356,12 @@ func (n *node) checkProof(h hash.Hash, key string, seed float64, proof uint) boo
 		} else {
 			// Some bits have to be zero
 			mask := byte((1 << zeroesLeft) - 1)
-			// log.Logger.Info().Msgf("[%s] check that %v bits are 0 with mask %v", n.GetAddress(), zeroesLeft, mask)
 
 			if b&mask != 0 {
 				return false
 			}
 		}
 		zeroesLeft -= 8
-
-		// if i < numberOfBytes-1 {
-		// 	log.Logger.Info().Msgf("[%s] check the whole byte is 0", n.GetAddress())
-		// 	// All bits have to be zero
-		// 	if b != 0 {
-		// 		return false
-		// 	}
-		// } else {
-		// 	// Some (maybe all) bits have to be zero
-		// 	zeroesInByte := zeroesLeft - (i+1)*8
-		// 	log.Logger.Info().Msgf("[%s] check that %v bits are 0", n.GetAddress(), zeroesInByte)
-		// 	mask := byte((1 << (zeroesInByte - 1)) - 1)
-
-		// 	if b&mask != 0 {
-		// 		return false
-		// 	}
-		// }
 	}
 
 	return true
