@@ -2,9 +2,8 @@ package impl
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	crand "crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"hash"
 	"math/rand"
@@ -18,8 +17,7 @@ import (
 )
 
 func NewRecommender(conf *peer.Configuration, voteStore *concurrent.VoteStore) Recommender {
-	EC := elliptic.P256()
-	key, _ := ecdsa.GenerateKey(EC, crand.Reader) // TODO: error?
+	key, _ := rsa.GenerateKey(crand.Reader, 2048) // TODO: error?
 
 	return Recommender{
 		// Config args
@@ -46,7 +44,7 @@ type Recommender struct {
 	// Article id array of currently recommended articles
 	current []string
 	// Key used for VoteMessage message types (to preserve anonymity)
-	key *ecdsa.PrivateKey
+	key *rsa.PrivateKey
 }
 
 type ArticleScore struct {

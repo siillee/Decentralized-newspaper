@@ -1,7 +1,7 @@
 package impl
 
 import (
-	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"time"
@@ -177,18 +177,14 @@ func (n *node) heartbeatMechanism() {
 
 // Updates the proof store periodically, providing values for proof of work (used in the VoteMessage to restrict the number of sybil identities)
 func (n *node) runProofMaintenance() {
-	keysRaw := []ecdsa.PublicKey{
+	keysRaw := []rsa.PublicKey{
 		n.recommender.key.PublicKey,
 	}
 
 	// Translate the keys to strings as we only need their values (not cryptographic utility), and strings are easier to work with
 	keys := make([]string, 0)
 	for _, raw := range keysRaw {
-		bytes, err := x509.MarshalPKIXPublicKey(&raw)
-		if err != nil {
-			z.Logger.Err(err).Msgf("[%s] failed to translate public key to string (proof maintenance mechansim)", n.GetAddress())
-			continue
-		}
+		bytes := x509.MarshalPKCS1PublicKey(&raw)
 
 		key := string(bytes)
 		keys = append(keys, key)

@@ -2,14 +2,17 @@ package unit
 
 import (
 	"bytes"
-	"github.com/stretchr/testify/require"
-	z "go.dedis.ch/cs438/internal/testing"
-	"go.dedis.ch/cs438/transport"
-	"go.dedis.ch/cs438/transport/channel"
+	crand "crypto/rand"
+	"crypto/rsa"
 	"math/rand"
 	"regexp"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	z "go.dedis.ch/cs438/internal/testing"
+	"go.dedis.ch/cs438/transport"
+	"go.dedis.ch/cs438/transport/channel"
 )
 
 // Scenario: A publish an Article, C downloads it with topology : A <-> B <-> C
@@ -100,16 +103,29 @@ func Test_Basic_Features_Scenario(t *testing.T) {
 				z.WithAckTimeout(time.Second * 10),
 			}
 
-			nodeA := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			keysA, err := rsa.GenerateKey(crand.Reader, 2048) // this generates a public & private key pair
+			require.NoError(t, err)
+			keysB, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
+			keysC, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
+			keysD, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
+
+			optsA := append(opts, z.WithPrivateKey(keysA))
+			nodeA := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsA...)
 			defer nodeA.Stop()
 
-			nodeB := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			optsB := append(opts, z.WithPrivateKey(keysB))
+			nodeB := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsB...)
 			defer nodeB.Stop()
 
-			nodeC := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			optsC := append(opts, z.WithPrivateKey(keysC))
+			nodeC := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsC...)
 			defer nodeC.Stop()
 
-			nodeD := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			optsD := append(opts, z.WithPrivateKey(keysD))
+			nodeD := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsD...)
 			defer nodeD.Stop()
 
 			nodeA.AddPeer(nodeB.GetAddr())
@@ -118,6 +134,22 @@ func Test_Basic_Features_Scenario(t *testing.T) {
 			nodeC.AddPeer(nodeA.GetAddr())
 			nodeC.AddPeer(nodeD.GetAddr())
 			nodeD.AddPeer(nodeB.GetAddr())
+
+			nodeA.AddPublicKey(keysB.PublicKey, nodeB.GetAddr())
+			nodeA.AddPublicKey(keysC.PublicKey, nodeC.GetAddr())
+			nodeA.AddPublicKey(keysD.PublicKey, nodeD.GetAddr())
+
+			nodeB.AddPublicKey(keysA.PublicKey, nodeA.GetAddr())
+			nodeB.AddPublicKey(keysC.PublicKey, nodeC.GetAddr())
+			nodeB.AddPublicKey(keysD.PublicKey, nodeD.GetAddr())
+
+			nodeC.AddPublicKey(keysA.PublicKey, nodeA.GetAddr())
+			nodeC.AddPublicKey(keysB.PublicKey, nodeB.GetAddr())
+			nodeC.AddPublicKey(keysD.PublicKey, nodeD.GetAddr())
+
+			nodeD.AddPublicKey(keysA.PublicKey, nodeA.GetAddr())
+			nodeD.AddPublicKey(keysB.PublicKey, nodeB.GetAddr())
+			nodeD.AddPublicKey(keysC.PublicKey, nodeC.GetAddr())
 
 			// Wait for the anti-entropy to take effect, i.e. everyone gets the
 			// heartbeat message from everyone else.
@@ -175,14 +207,42 @@ func Test_Basic_Features_Scenario(t *testing.T) {
 			// 	           ▼       ▼   │
 			// 	           A ◄───► B ◄─┘
 
-			nodeE := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			keysE, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
+			keysF, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
+
+			optsE := append(opts, z.WithPrivateKey(keysE))
+			nodeE := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsE...)
 			defer nodeE.Stop()
 
-			nodeF := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", opts...)
+			optsF := append(opts, z.WithPrivateKey(keysF))
+			nodeF := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", optsF...)
 			defer nodeF.Stop()
 
 			nodeE.AddPeer(nodeC.GetAddr())
 			nodeF.AddPeer(nodeE.GetAddr())
+
+			nodeA.AddPublicKey(keysE.PublicKey, nodeE.GetAddr())
+			nodeA.AddPublicKey(keysF.PublicKey, nodeF.GetAddr())
+			nodeB.AddPublicKey(keysE.PublicKey, nodeE.GetAddr())
+			nodeB.AddPublicKey(keysF.PublicKey, nodeF.GetAddr())
+			nodeC.AddPublicKey(keysE.PublicKey, nodeE.GetAddr())
+			nodeC.AddPublicKey(keysF.PublicKey, nodeF.GetAddr())
+			nodeD.AddPublicKey(keysE.PublicKey, nodeE.GetAddr())
+			nodeD.AddPublicKey(keysF.PublicKey, nodeF.GetAddr())
+
+			nodeE.AddPublicKey(keysA.PublicKey, nodeA.GetAddr())
+			nodeE.AddPublicKey(keysB.PublicKey, nodeB.GetAddr())
+			nodeE.AddPublicKey(keysC.PublicKey, nodeC.GetAddr())
+			nodeE.AddPublicKey(keysD.PublicKey, nodeD.GetAddr())
+			nodeE.AddPublicKey(keysF.PublicKey, nodeF.GetAddr())
+
+			nodeF.AddPublicKey(keysA.PublicKey, nodeA.GetAddr())
+			nodeF.AddPublicKey(keysB.PublicKey, nodeB.GetAddr())
+			nodeF.AddPublicKey(keysC.PublicKey, nodeC.GetAddr())
+			nodeF.AddPublicKey(keysD.PublicKey, nodeD.GetAddr())
+			nodeF.AddPublicKey(keysE.PublicKey, nodeE.GetAddr())
 
 			// wait for the anti-entropy to take effect, i.e. everyone get the
 			// heartbeat messages sent by nodeE and nodeF.

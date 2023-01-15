@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/require"
 	z "go.dedis.ch/cs438/internal/testing"
 	log "go.dedis.ch/cs438/logger"
@@ -29,13 +31,11 @@ import (
 func Test_Sybil_Vote_Valid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	voteKeys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
@@ -73,8 +73,7 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pubBytes, err := x509.MarshalPKIXPublicKey(&voteKeys.PublicKey)
-	require.NoError(t, err)
+	pubBytes := x509.MarshalPKCS1PublicKey(&voteKeys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: time.Now(),
@@ -114,13 +113,11 @@ func Test_Sybil_Vote_Valid(t *testing.T) {
 func Test_Sybil_Vote_Invalid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	voteKeys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
@@ -132,8 +129,7 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 
 	node1.AddPublicKey(keys2.PublicKey, sock2.GetAddress())
 
-	pubBytes, err := x509.MarshalPKIXPublicKey(&voteKeys.PublicKey)
-	require.NoError(t, err)
+	pubBytes := x509.MarshalPKCS1PublicKey(&voteKeys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: time.Now(),
@@ -177,13 +173,11 @@ func Test_Sybil_Vote_Invalid(t *testing.T) {
 func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	voteKeys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	voteKeys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithProofDifficulty(0))
@@ -221,8 +215,7 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pubBytes, err := x509.MarshalPKIXPublicKey(&voteKeys.PublicKey)
-	require.NoError(t, err)
+	pubBytes := x509.MarshalPKCS1PublicKey(&voteKeys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: time.Now(),
@@ -259,15 +252,13 @@ func Test_Sybil_Vote_Bad_Signature(t *testing.T) {
 func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote1Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote2Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(1000*time.Second), z.WithProofDifficulty(0))
@@ -309,8 +300,7 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub1Bytes, err := x509.MarshalPKIXPublicKey(&vote1Keys.PublicKey)
-	require.NoError(t, err)
+	pub1Bytes := x509.MarshalPKCS1PublicKey(&vote1Keys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment2,
@@ -330,8 +320,7 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub2Bytes, err := x509.MarshalPKIXPublicKey(&vote2Keys.PublicKey)
-	require.NoError(t, err)
+	pub2Bytes := x509.MarshalPKCS1PublicKey(&vote2Keys.PublicKey)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment3,
@@ -370,15 +359,13 @@ func Test_Sybil_Vote_No_Timeouts(t *testing.T) {
 func Test_Sybil_Vote_Timeout(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote1Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote2Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second), z.WithProofDifficulty(0))
@@ -420,8 +407,7 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub1Bytes, err := x509.MarshalPKIXPublicKey(&vote1Keys.PublicKey)
-	require.NoError(t, err)
+	pub1Bytes := x509.MarshalPKCS1PublicKey(&vote1Keys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment3,
@@ -441,8 +427,7 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub2Bytes, err := x509.MarshalPKIXPublicKey(&vote2Keys.PublicKey)
-	require.NoError(t, err)
+	pub2Bytes := x509.MarshalPKCS1PublicKey(&vote2Keys.PublicKey)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment2,
@@ -480,15 +465,13 @@ func Test_Sybil_Vote_Timeout(t *testing.T) {
 func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote1Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote2Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote2Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithVoteTimeout(100*time.Second), z.WithProofDifficulty(0))
@@ -504,8 +487,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	moment2 := moment1.Add(10 * time.Second)
 	moment3 := moment1.Add(200 * time.Second)
 
-	pub1Bytes, err := x509.MarshalPKIXPublicKey(&vote1Keys.PublicKey)
-	require.NoError(t, err)
+	pub1Bytes := x509.MarshalPKCS1PublicKey(&vote1Keys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment3,
@@ -531,8 +513,7 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub2Bytes, err := x509.MarshalPKIXPublicKey(&vote2Keys.PublicKey)
-	require.NoError(t, err)
+	pub2Bytes := x509.MarshalPKCS1PublicKey(&vote2Keys.PublicKey)
 	voteMessage = types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment2,
@@ -604,13 +585,11 @@ func Test_Sybil_Vote_Timeout_After(t *testing.T) {
 func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	vote1Keys, err := ecdsa.GenerateKey(EC, rand.Reader)
+	vote1Keys, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1), z.WithCheckProofThreshold(0), z.WithProofDifficulty(8))
@@ -651,8 +630,7 @@ func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
 	err = sock2.Send(node1.GetAddr(), pkt, 0)
 	require.NoError(t, err)
 
-	pub1Bytes, err := x509.MarshalPKIXPublicKey(&vote1Keys.PublicKey)
-	require.NoError(t, err)
+	pub1Bytes := x509.MarshalPKCS1PublicKey(&vote1Keys.PublicKey)
 	voteMessage := types.VoteMessage{
 		ArticleID: "article 1",
 		Timestamp: moment2,
@@ -690,11 +668,9 @@ func Test_Sybil_Vote_Proof_Invalid(t *testing.T) {
 func Test_Sybil_Vote_Proof_Valid(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithPrivateKey(keys1),
@@ -737,11 +713,9 @@ func Test_Sybil_Vote_Proof_Valid(t *testing.T) {
 func Test_Sybil_Vote_Proof_Performance(t *testing.T) {
 	transp := channel.NewTransport()
 
-	EC := elliptic.P256()
-
-	keys1, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys1, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	keys2, err := ecdsa.GenerateKey(EC, rand.Reader)
+	keys2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
 	difficulty := 18
@@ -957,14 +931,11 @@ func Test_Sybil_Recommended_With_Botting(t *testing.T) {
 	require.NoError(t, err)
 	defer botSock.Close()
 
-	EC := elliptic.P256()
-
 	for i := 0; i < 10; i++ {
-		keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+		keys, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
 		require.NoError(t, err)
 
-		pubBytes, err := x509.MarshalPKIXPublicKey(&keys.PublicKey)
-		require.NoError(t, err)
+		pubBytes := x509.MarshalPKCS1PublicKey(&keys.PublicKey)
 		voteMessage := types.VoteMessage{
 			ArticleID: articles[badArticleIndex].id,
 			Timestamp: time.Now(),
@@ -1046,7 +1017,7 @@ func Test_Sybil_Scenario(t *testing.T) {
 	userGoodChance := 0.19
 	userBadChance := 0.005
 
-	botNetSize := 1_000
+	botNetSize := 1000
 	botGoodChance := 0.06
 	botBadChance := 0.3
 
@@ -1109,21 +1080,21 @@ func Test_Sybil_Scenario(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Voting sim set-up
-	EC := elliptic.P256()
-
 	voteStore, ok := node.GetVoteStore().(concurrent.VoteStore)
 	require.True(t, ok)
 
-	botVoteFun := func(articleID string, publicKey []byte, privateKey *ecdsa.PrivateKey) {
+	// botVoteFun := func(articleID string, publicKey []byte, privateKey *rsa.PrivateKey) {
+	botVoteFun := func(articleID string, uniqueKey []byte) {
 		voteMessage := types.VoteMessage{
 			ArticleID: articleID,
 			Timestamp: time.Now(),
 			Proof:     0,
-			PublicKey: publicKey,
+			PublicKey: uniqueKey,
+			Signature: []byte{},
 		}
-		signBytes, err := voteMessage.Sign(privateKey)
-		require.NoError(t, err)
-		voteMessage.Signature = signBytes
+		// signBytes, err := voteMessage.Sign(privateKey)
+		// require.NoError(t, err)
+		// voteMessage.Signature = signBytes
 		voteStore.Add(voteMessage)
 	}
 
@@ -1132,11 +1103,11 @@ func Test_Sybil_Scenario(t *testing.T) {
 			if i%100 == 0 {
 				log.Logger.Info().Msgf("ping from simulateVotingPattern...")
 			}
-			keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
-			require.NoError(t, err)
+			// keys, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
+			// require.NoError(t, err)
 
-			pubBytes, err := x509.MarshalPKIXPublicKey(&keys.PublicKey)
-			require.NoError(t, err)
+			// pubBytes := x509.MarshalPKCS1PublicKey(&keys.PublicKey)
+			uniqueKey := xid.New().Bytes()
 
 			// Bot voting for good articles
 			for _, art := range goodArticles {
@@ -1146,7 +1117,8 @@ func Test_Sybil_Scenario(t *testing.T) {
 					continue
 				}
 
-				botVoteFun(art.id, pubBytes, keys)
+				// botVoteFun(art.id, pubBytes, keys)
+				botVoteFun(art.id, uniqueKey)
 			}
 			// Bot voting for bad articles
 			for _, art := range badArticles {
@@ -1156,7 +1128,8 @@ func Test_Sybil_Scenario(t *testing.T) {
 					continue
 				}
 
-				botVoteFun(art.id, pubBytes, keys)
+				// botVoteFun(art.id, pubBytes, keys)
+				botVoteFun(art.id, uniqueKey)
 			}
 		}
 	}
@@ -1184,6 +1157,8 @@ func Test_Sybil_Scenario(t *testing.T) {
 		voters := voteStore.Get(art.id)
 		badVoteCount += len(voters)
 	}
+	log.Logger.Info().Msgf("avg good vote count: %v", (goodVoteCount / len(goodArticles)))
+	log.Logger.Info().Msgf("avg bad vote count: %v", (badVoteCount / len(badArticles)))
 
 	// Simulate new user's experience using the feed
 	log.Logger.Info().Msgf("starting user experience simulation...")
@@ -1214,4 +1189,50 @@ func Test_Sybil_Scenario(t *testing.T) {
 	marginOfError := 2 * expectedLoss
 	log.Logger.Info().Msgf("loss is %v (%v%%)", badRecs, (100.0 * float64(badRecs) / float64(feedCycles)))
 	require.Less(t, float64(badRecs), marginOfError)
+}
+
+func Test_Speed_RSA(t *testing.T) {
+	keys, err := rsa.GenerateKey(rand.Reader, 2048) // this generates a public & private key pair
+	require.NoError(t, err)
+
+	publicKey := x509.MarshalPKCS1PublicKey(&keys.PublicKey)
+
+	// CYCLES
+	cycles := 1000
+	for i := 0; i < cycles; i++ {
+		voteMessage := types.VoteMessage{
+			ArticleID: "jajce",
+			Timestamp: time.Now(),
+			Proof:     0,
+			PublicKey: publicKey,
+		}
+		signBytes, err := voteMessage.Sign(keys)
+		require.NoError(t, err)
+		voteMessage.Signature = signBytes
+	}
+}
+
+func Test_Speed_ECDSA(t *testing.T) {
+	EC := elliptic.P256()
+
+	keys, err := ecdsa.GenerateKey(EC, rand.Reader) // this generates a public & private key pair
+	require.NoError(t, err)
+
+	publicKey, err := x509.MarshalPKIXPublicKey(&keys.PublicKey)
+	require.NoError(t, err)
+
+	// CYCLES
+	cycles := 1000
+	for i := 0; i < cycles; i++ {
+		voteMessage := types.VoteMessage{
+			ArticleID: "jajce",
+			Timestamp: time.Now(),
+			Proof:     0,
+			PublicKey: publicKey,
+		}
+		// signBytes, err := voteMessage.Sign(keys)
+		signBytes, err := ecdsa.SignASN1(rand.Reader, keys, voteMessage.Hash())
+		require.NoError(t, err)
+		voteMessage.Signature = signBytes
+	}
 }
