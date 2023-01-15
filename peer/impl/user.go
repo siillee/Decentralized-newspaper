@@ -38,6 +38,9 @@ func (n *node) PublishArticle(title string, content io.Reader) (string, error) {
 	if n.conf.TorEnabled {
 		buf := new(bytes.Buffer)
 		buf.ReadFrom(content)
+
+		_ = n.Tag(title, metaHash)
+
 		return articleID, n.AnonymousPublishArticle(articleSummaryMessage, buf.String())
 	}
 
